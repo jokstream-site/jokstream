@@ -106,9 +106,12 @@ async function loadChannels() {
   list.innerHTML = '<div class="empty-state">Loading the public channel directory…</div>';
   $("playerStatus").textContent = "Loading channel directory";
   try {
-    const response = await fetch(PLAYLIST_URL, { cache: "no-store" });
+    const response = await fetch(AUTHORIZED_HTTP_PROXY_BASE, { cache: "no-store" });
     if (!response.ok) throw new Error(`Playlist request failed (${response.status})`);
-    allChannels = parseM3U(await response.text());
+    // The Worker returns the playlist Base64-encoded; decode as UTF-8 to keep Arabic and other names intact.
+    const binary = atob((await response.text()).trim());
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    allChannels = parseM3U(new TextDecoder("utf-8").decode(bytes));
     allChannels.sort((a, b) => a.name.localeCompare(b.name));
     $("channelCount").textContent = allChannels.length.toLocaleString();
     populateCategories();
