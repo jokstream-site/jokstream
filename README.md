@@ -9,7 +9,7 @@ Static Netlify website. The archive root contains `index.html`, `app.js`, `style
 - Dynamic client-side title, description, and JSON-LD when a channel is selected.
 - Owner-supplied Monetag zones: Vignette `12117072`, Popunder `12117037`, and banner `12117045`.
 - Popunder script loading is limited by a 30-minute local-storage timestamp when storage is available. Monetag's own delivery logic may still affect actual impressions and browser behavior.
-- Owner Cloudflare Worker URL for the directory response and authorized HTTP-only stream URLs encoded as path segments. HTTPS stream URLs are requested directly.
+- Owner Cloudflare Worker URL for the directory response (`?get_list=true`) and authorized HTTP-only stream URLs encoded in the `proxy_url` query parameter. HTTPS stream URLs are requested directly.
 
 ## Important limitations
 - Presence counts connected sessions, not verified human viewers; multiple tabs/devices and dropped connections can affect the number. Confirm Supabase Realtime Presence is enabled for this project.

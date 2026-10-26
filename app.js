@@ -1,7 +1,8 @@
 /* JokStream app logic. Use only channels you are authorized to access or redistribute. */
 const CHANNELS_PER_PAGE = 30;
 // The owner Worker serves the channel directory and can proxy authorized HTTP-only sources.
-const AUTHORIZED_HTTP_PROXY_BASE = "https://jokstream-proxy.abdonarjah.workers.dev/";
+const CHANNEL_DIRECTORY_URL = "https://jokstream-proxy.abdonarjah.workers.dev/?get_list=true";
+const AUTHORIZED_HTTP_PROXY_BASE = "https://jokstream-proxy.abdonarjah.workers.dev/?proxy_url=";
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
 // Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
@@ -134,7 +135,7 @@ async function loadChannels() {
   list.innerHTML = '<div class="empty-state">Loading the public channel directory…</div>';
   $("playerStatus").textContent = "Loading channel directory";
   try {
-    const response = await fetch(AUTHORIZED_HTTP_PROXY_BASE, { cache: "no-store" });
+    const response = await fetch(CHANNEL_DIRECTORY_URL, { cache: "no-store" });
     if (!response.ok) throw new Error(`Playlist request failed (${response.status})`);
     // Decode the Worker payload as UTF-8 so Arabic and other channel names remain intact.
     const binary = atob((await response.text()).trim());
