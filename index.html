@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b12">
+  <meta name="description" content="Explore live channels and join a channel-specific community chat on JokStream.">
+  <meta name="keywords" content="JokStream, live channels, live TV, channel chat">
+  <meta property="og:title" content="JokStream — Live TV & Community Chat">
+  <meta property="og:description" content="Explore live channels and join the conversation.">
+  <meta property="og:type" content="website">
+  <title>JokStream — Live TV & Entertainment</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="JokStream home"><span class="brand-mark">J</span><span>Jok<span class="accent">Stream</span></span></a>
+      <div class="topbar-actions">
+        <span class="live-pill"><span class="live-dot"></span> LIVE TV</span>
+        <button id="installButton" class="button button-ghost" hidden>Install app</button>
+        <button id="openShareModalButton" class="button button-primary">Share</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">YOUR WORLD. LIVE.</p>
+          <h1>Entertainment without <span class="accent">limits.</span></h1>
+          <p class="hero-copy">Explore live channels from around the world in one place.</p>
+        </div>
+        <div class="hero-stat"><span class="stat-number" id="channelCount">—</span><span class="stat-label">channels listed</span></div>
+      </section>
+
+      <section class="watch-grid" aria-label="Live player and channel chat">
+        <div class="main-column">
+          <section class="player-card">
+            <div class="section-heading player-heading">
+              <div><p class="eyebrow">NOW PLAYING</p><h2 id="nowPlayingTitle">Choose a channel</h2></div>
+              <div class="player-actions"><span class="quality-badge">LIVE</span><button id="cinemaModeButton" class="button button-ghost" type="button" aria-pressed="false">Cinema mode</button></div>
+            </div>
+            <div class="video-wrap">
+              <video id="jokstreamPlayer" controls preload="metadata" playsinline crossorigin="anonymous"></video>
+              <div id="playerMessage" class="player-message">Choose a channel from the list to start watching.</div>
+            </div>
+            <div class="player-footer"><span id="playerStatus">Ready when you are</span><span class="subtle">Stream availability depends on the provider.</span></div>
+          </section>
+        </div>
+
+        <aside class="side-column">
+          <section class="panel chat-panel">
+            <div class="section-heading"><div><p class="eyebrow">COMMUNITY</p><h2>Channel chat</h2></div><span id="chatConnectionStatus" class="connection-status"><i></i> Not connected</span></div>
+            <p id="chatRoomLabel" class="chat-room-label">Room: select a channel</p>
+            <div id="viewerCount" class="viewer-count" aria-live="polite">👁️ 0 watching now</div>
+            <label class="field-label" for="chatNickname">Your nickname</label>
+            <input id="chatNickname" class="text-field" maxlength="24" placeholder="Choose a nickname" autocomplete="nickname">
+            <div id="chatMessages" class="chat-messages" aria-live="polite"><div class="chat-empty">Connect to a channel to join its shared live chat.</div></div>
+            <form id="chatForm" class="chat-form">
+              <input id="chatMessageInput" class="text-field" maxlength="300" placeholder="Write a message…" autocomplete="off" disabled>
+              <button id="chatSendButton" class="button button-primary" type="submit" disabled>Send</button>
+            </form>
+            <p id="chatFeedback" class="form-feedback">Choose a channel to join its shared live chat.</p>
+          </section>
+          <div class="ad-slot ad-slot-vertical" id="sidebarVignetteSlot">
+            <span class="ad-label">ADVERTISEMENT</span>
+            <div id="monetagBannerSlot"><strong>Sponsored</strong><p>Advertisements help support JokStream.</p></div>
+          </div>
+          <section class="panel share-panel">
+            <p class="eyebrow">SPREAD THE WORD</p>
+            <h2>Enjoying JokStream?</h2>
+            <p>Share the experience with friends and invite them to watch with you.</p>
+            <button id="copySiteLinkButton" class="button button-ghost full-width">Copy website link</button>
+          </section>
+        </aside>
+      </section>
+
+      <div class="ad-slot" id="belowPlayerAdSlot">
+        <span class="ad-label">ADVERTISEMENT</span>
+        <div id="monetagInlineBannerSlot"><strong>Sponsored</strong><p>Advertisements help support JokStream.</p></div>
+      </div>
+
+      <section class="channel-section">
+        <div class="section-heading">
+          <div><p class="eyebrow">DISCOVER</p><h2>Live channels</h2></div>
+          <span id="resultsCount" class="subtle">Loading channels…</span>
+        </div>
+        <div class="search-row">
+          <label class="search-box"><span aria-hidden="true">⌕</span><input id="channelSearch" type="search" placeholder="Search channels or countries…" autocomplete="off"></label>
+          <select id="categoryFilter" aria-label="Filter channels"><option value="">All categories</option></select>
+          <nav id="categoryQuickFilters" class="category-quick-filters" aria-label="Quick channel categories"></nav>
+        </div>
+        <div id="channelList" class="channel-grid"><div class="empty-state">Loading the channel directory…</div></div>
+        <button id="loadMoreButton" class="button button-ghost load-more" hidden>Load more channels</button>
+        <p class="source-note">Channel directory: iptv-org public playlist. Availability, rights, and geographic restrictions are controlled by each stream provider. Use streams you are authorized to access and distribute.</p>
+      </section>
+    </main>
+
+    <footer class="footer"><span>© <span id="year"></span> JokStream</span><span>Watch responsibly. Respect content owners.</span></footer>
+  </div>
+
+  <section id="playerOverlay" class="player-overlay" hidden aria-label="Channel player and live chat">
+    <header class="overlay-header"><span id="overlayChannelTitle">Now watching</span><button id="closePlayerOverlay" type="button" aria-label="Close player">×</button></header>
+    <div class="overlay-player-slot" id="overlayPlayerSlot"></div>
+    <div class="overlay-chat-slot" id="overlayChatSlot"></div>
+  </section>
+
+  <div id="shareModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <button id="closeShareModalButton" class="modal-close" aria-label="Close dialog">×</button>
+      <div class="modal-icon">↗</div>
+      <p class="eyebrow">SHARE JOKSTREAM</p>
+      <h2 id="shareModalTitle">Good things are better shared.</h2>
+      <p>Invite friends to discover the live channel directory and watch together.</p>
+      <a id="whatsappShareButton" class="button button-whatsapp" href="https://wa.me/" target="_blank" rel="noopener noreferrer">Share on WhatsApp</a>
+      <button id="modalCopyLinkButton" class="button button-ghost full-width">Copy website link</button>
+      <button id="continueWatchingButton" class="text-button">Continue watching</button>
+      <p class="modal-note">Sharing is optional. A website cannot verify whether a WhatsApp message was actually sent.</p>
+    </div>
+  </div>
+
+  <div id="shareGateModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="shareGateTitle">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <div class="modal-icon">↗</div>
+      <p class="eyebrow">EXCLUSIVE CHANNEL</p>
+      <h2 id="shareGateTitle">Share JokStream to continue</h2>
+      <p>This channel is marked as exclusive in its channel metadata. Tap below to open WhatsApp, then return to this tab. The site can detect the click and return, but cannot verify that a message was sent.</p>
+      <button id="shareGateButton" class="button button-whatsapp full-width" type="button">Open WhatsApp to share</button>
+      <p id="shareGateStatus" class="modal-note">Playback will not start until you return from WhatsApp.</p>
+    </div>
+  </div>
+
+  <div id="socialToastRegion" class="toast-region" aria-live="polite"></div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p2p-media-loader-hlsjs@4.0.0/dist/p2p-media-loader-hlsjs.iife.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "JokStream - Live TV & Entertainment",
+  "short_name": "JokStream",
+  "description": "Discover and watch live TV channels in one premium streaming experience.",
+  "lang": "en",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#080b12",
+  "background_color": "#080b12",
+  "categories": ["entertainment", "video"],
+  "prefer_related_applications": false,
+  "icons": [
+    {"src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
