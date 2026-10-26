@@ -1,10 +1,8 @@
 /* JokStream app logic. Use only channels you are authorized to access or redistribute. */
 const PLAYLIST_URL = "https://iptv-org.github.io/iptv/index.m3u";
 const CHANNELS_PER_PAGE = 30;
-// This Worker belongs to the site owner. The default contract sends the source URL
-// as ?url=...; change PROXY_PARAMETER only if your Worker expects another parameter.
+// This Worker belongs to the site owner and accepts encoded stream URLs as path segments.
 const AUTHORIZED_HTTP_PROXY_BASE = "https://jokstream-proxy.abdonarjah.workers.dev/";
-const PROXY_PARAMETER = "url";
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
 // Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
@@ -84,8 +82,8 @@ function parseM3U(text) {
       // Preserve both HTTPS and HTTP stream URLs; no scheme-based channel filtering.
       if (/^https?:\/\//i.test(current.url)) {
         const metadata = `${current.name} ${current.group}`;
-        current.requiresShare = /\b(premium|exclusive|encrypted|vip|members[ -]?only)\b/i.test(metadata);
-        current.roomId = slugify(`${current.name}-${current.group}-${current.country}`);
+        current.shareGate = /\b(premium|exclusive|encrypted|vip|members[ -]?only)\b/i.test(metadata);
+        current.chatRoom = slugify(`${current.name}-${current.group}-${current.country}`);
         channels.push(current);
       }
       current = null;
@@ -101,6 +99,37 @@ function parseM3U(text) {
   });
 }
 
+function normalizeChannel(channel) {
+  if (!channel || typeof channel !== "object" || Array.isArray(channel)) {
+    throw new Error("The channel directory contains an invalid channel.");
+  }
+  const name = safeText(channel.name, 140) || "Unknown channel";
+  const group = safeText(channel.group || "Other", 80);
+  const country = safeText(channel.country, 80);
+  const url = typeof channel.url === "string" ? channel.url.trim() : "";
+  let source;
+  try {
+    source = new URL(url);
+  } catch (_) {
+    throw new Error(`The channel directory contains an invalid URL for "${name}".`);
+  }
+  if (source.protocol !== "http:" && source.protocol !== "https:") {
+    throw new Error(`The channel directory contains an unsupported URL for "${name}".`);
+  }
+  const hasShareGate = Object.prototype.hasOwnProperty.call(channel, "shareGate");
+  return {
+    name,
+    group,
+    logo: typeof channel.logo === "string" ? channel.logo : "",
+    country,
+    url: source.href,
+    chatRoom: safeText(channel.chatRoom, 160) || slugify(`${name}-${group}-${country}`),
+    shareGate: hasShareGate
+      ? channel.shareGate === true || channel.shareGate === "true"
+      : /\b(premium|exclusive|encrypted|vip|members[ -]?only)\b/i.test(`${name} ${group}`)
+  };
+}
+
 async function loadChannels() {
   const list = $("channelList");
   list.innerHTML = '<div class="empty-state">Loading the public channel directory…</div>';
@@ -108,10 +137,17 @@ async function loadChannels() {
   try {
     const response = await fetch(AUTHORIZED_HTTP_PROXY_BASE, { cache: "no-store" });
     if (!response.ok) throw new Error(`Playlist request failed (${response.status})`);
-    // The Worker returns the playlist Base64-encoded; decode as UTF-8 to keep Arabic and other names intact.
+    // Decode the Worker payload as UTF-8 so Arabic and other channel names remain intact.
     const binary = atob((await response.text()).trim());
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    allChannels = parseM3U(new TextDecoder("utf-8").decode(bytes));
+    const payload = new TextDecoder("utf-8").decode(bytes).trim();
+    if (payload.startsWith("[") || payload.startsWith("{")) {
+      const channels = JSON.parse(payload);
+      if (!Array.isArray(channels)) throw new Error("The channel directory response is not a list.");
+      allChannels = channels.map(normalizeChannel);
+    } else {
+      allChannels = parseM3U(payload).map(normalizeChannel);
+    }
     allChannels.sort((a, b) => a.name.localeCompare(b.name));
     $("channelCount").textContent = allChannels.length.toLocaleString();
     populateCategories();
@@ -251,20 +287,15 @@ function stopCurrentHls() {
 function resolveStreamUrl(originalUrl) {
   try {
     const source = new URL(originalUrl);
-    if (source.protocol === "https:") return source.href;
-    if (source.protocol !== "http:") return "";
-    // Route only insecure HTTP media through the owner's HTTPS Worker. This does not
-    // bypass DRM, authentication, geo restrictions, or a provider's access controls.
-    const proxy = new URL(AUTHORIZED_HTTP_PROXY_BASE);
-    proxy.searchParams.set(PROXY_PARAMETER, source.href);
-    return proxy.href;
+    if (source.protocol !== "http:" && source.protocol !== "https:") return "";
+    return `${AUTHORIZED_HTTP_PROXY_BASE}${encodeURIComponent(source.href)}`;
   } catch (_) {
     return "";
   }
 }
 
 function requestPlayChannel(channel, selectedButton) {
-  if (!shareUnlockedThisSession || channel.requiresShare) {
+  if (!shareUnlockedThisSession || channel.shareGate) {
     pendingGateChannel = { channel, selectedButton };
     openShareGate();
     return;
@@ -463,9 +494,9 @@ function playChannel(channel, selectedButton) {
     setPlayerMessage("This channel URL could not be parsed.", true);
     return;
   }
-  const isHls = /\.m3u8($|[?#])/i.test(new URL(streamUrl).pathname + new URL(streamUrl).search);
-  const isHttpSource = /^http:\/\//i.test(channel.url);
-  if (isHttpSource) $("playerStatus").textContent = "Opening HTTP source through your HTTPS Worker…";
+  const source = new URL(channel.url);
+  const isHls = /\.m3u8$/i.test(source.pathname);
+  $("playerStatus").textContent = "Opening stream through your HTTPS Worker…";
   if (isHls) {
     configureAdaptiveHls(videoElement, streamUrl, channel);
   } else {
@@ -584,7 +615,7 @@ function renderChatMessage(message) {
 
 async function setChatRoom(channel) {
   if (!channel) return;
-  const nextKey = channel.roomId || slugify(channel.name);
+  const nextKey = channel.chatRoom || slugify(channel.name);
   if (nextKey === chatRoomKey) return;
   chatRoomKey = nextKey;
   presenceRoomKey = nextKey;
