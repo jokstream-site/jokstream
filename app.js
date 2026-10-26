@@ -1,7 +1,6 @@
 /* JokStream app logic. Use only channels you are authorized to access or redistribute. */
-const PLAYLIST_URL = "https://iptv-org.github.io/iptv/index.m3u";
 const CHANNELS_PER_PAGE = 30;
-// This Worker belongs to the site owner and accepts encoded stream URLs as path segments.
+// The owner Worker serves the channel directory and can proxy authorized HTTP-only sources.
 const AUTHORIZED_HTTP_PROXY_BASE = "https://jokstream-proxy.abdonarjah.workers.dev/";
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
@@ -152,9 +151,18 @@ async function loadChannels() {
     $("channelCount").textContent = allChannels.length.toLocaleString();
     populateCategories();
     applyChannelFilters();
-    $("playerStatus").textContent = "Channel directory ready";
+    if (allChannels.length) {
+      $("playerStatus").textContent = "Channel directory ready";
+    } else {
+      $("resultsCount").textContent = "0 results";
+      $("playerStatus").textContent = "Channel directory is empty";
+      list.innerHTML = '<div class="empty-state">No channels are currently published by the Worker.</div>';
+    }
   } catch (error) {
     console.error("Could not load IPTV playlist:", error);
+    allChannels = [];
+    filteredChannels = [];
+    $("channelCount").textContent = "0";
     list.innerHTML = '<div class="empty-state">Could not load the channel directory. Check your connection and try refreshing the page.</div>';
     $("resultsCount").textContent = "Unavailable";
     $("playerStatus").textContent = "Directory could not be loaded";
@@ -287,7 +295,8 @@ function stopCurrentHls() {
 function resolveStreamUrl(originalUrl) {
   try {
     const source = new URL(originalUrl);
-    if (source.protocol !== "http:" && source.protocol !== "https:") return "";
+    if (source.protocol === "https:") return source.href;
+    if (source.protocol !== "http:") return "";
     return `${AUTHORIZED_HTTP_PROXY_BASE}${encodeURIComponent(source.href)}`;
   } catch (_) {
     return "";
@@ -370,6 +379,7 @@ function setPlayerMessage(message, visible = true) {
 
 function configureAdaptiveHls(videoElement, streamUrl, channel) {
   stopCurrentHls();
+  let networkRecoveryAttempts = 0;
   const HlsCtor = window.Hls;
   if (!HlsCtor || !HlsCtor.isSupported()) {
     videoElement.src = streamUrl;
@@ -412,8 +422,11 @@ function configureAdaptiveHls(videoElement, streamUrl, channel) {
   hlsInstance.on(HlsCtor.Events.ERROR, (_event, data) => {
     if (!data.fatal) return;
     $("playerStatus").textContent = "Stream unavailable — try another authorized source";
-    setPlayerMessage("This stream may be offline, unsupported, or blocked by source/CORS/Worker rules. Protected streams are not bypassed.", true);
-    if (data.type === HlsCtor.ErrorTypes.NETWORK_ERROR) hlsInstance.startLoad();
+    setPlayerMessage("This source may be offline, unsupported, or deny browser playback. Access controls are not bypassed.", true);
+    if (data.type === HlsCtor.ErrorTypes.NETWORK_ERROR && networkRecoveryAttempts < 1) {
+      networkRecoveryAttempts += 1;
+      hlsInstance.startLoad();
+    }
     else if (data.type === HlsCtor.ErrorTypes.MEDIA_ERROR) hlsInstance.recoverMediaError();
     else stopCurrentHls();
   });
@@ -496,7 +509,9 @@ function playChannel(channel, selectedButton) {
   }
   const source = new URL(channel.url);
   const isHls = /\.m3u8$/i.test(source.pathname);
-  $("playerStatus").textContent = "Opening stream through your HTTPS Worker…";
+  $("playerStatus").textContent = source.protocol === "http:"
+    ? "Opening authorized HTTP source through your HTTPS Worker…"
+    : "Opening HTTPS source directly…";
   if (isHls) {
     configureAdaptiveHls(videoElement, streamUrl, channel);
   } else {
