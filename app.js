@@ -2,7 +2,8 @@
 const CHANNELS_PER_PAGE = 30;
 // The owner Worker serves the directory and proxies sources authorized for use.
 const CHANNEL_DIRECTORY_URL = "https://jokstreamproxy1.abdonarjah.workers.dev/?get_list=true";
-const STREAM_HANDSHAKE_TIMEOUT_MS = 800;
+const STREAM_PROXY_URL = "https://jokstreamproxy1.abdonarjah.workers.dev/";
+const STREAM_HANDSHAKE_TIMEOUT_MS = 3000;
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
 // Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
@@ -312,7 +313,7 @@ function resolveStreamUrl(channel) {
   try {
     const source = new URL(channel.url);
     if (source.protocol !== "http:" && source.protocol !== "https:") return "";
-    return `${CHANNEL_DIRECTORY_URL}${encodeURIComponent(channel.url)}`;
+    return `${STREAM_PROXY_URL}?proxy_url=${encodeURIComponent(channel.url)}`;
   } catch (_) {
     return "";
   }
@@ -392,7 +393,7 @@ function setPlayerMessage(message, visible = true) {
   $("playerMessage").classList.toggle("hidden", !visible);
 }
 
-function configureAdaptiveHls(videoElement, streamUrl, channel, isBackup = false) {
+function configureAdaptiveHls(videoElement, finalStreamUrl, channel, isBackup = false) {
   stopCurrentHls();
   let active = true;
   let handshakeTimer = null;
@@ -449,7 +450,7 @@ function configureAdaptiveHls(videoElement, streamUrl, channel, isBackup = false
   if (!isHls || !HlsCtor || !HlsCtor.isSupported()) {
     listen("loadedmetadata", ready);
     listen("error", failover);
-    videoElement.src = streamUrl;
+    videoElement.src = finalStreamUrl;
     videoElement.load();
     return;
   }
@@ -499,7 +500,7 @@ function configureAdaptiveHls(videoElement, streamUrl, channel, isBackup = false
       }
     });
     instance.attachMedia(videoElement);
-    instance.loadSource(streamUrl);
+    instance.loadSource(finalStreamUrl);
   } catch (_) { failover(); }
 }
 
@@ -573,14 +574,14 @@ function playChannel(channel, selectedButton) {
   videoElement.pause();
   videoElement.removeAttribute("src");
   videoElement.load();
-  const streamUrl = resolveStreamUrl(channel);
-  if (!streamUrl) {
+  const finalStreamUrl = resolveStreamUrl(channel);
+  if (!finalStreamUrl) {
     $("playerStatus").textContent = "Unsupported stream URL";
     setPlayerMessage("This channel URL could not be parsed.", true);
     return;
   }
   $("playerStatus").textContent = "Opening authorized stream through your HTTPS Worker…";
-  configureAdaptiveHls(videoElement, streamUrl, channel);
+  configureAdaptiveHls(videoElement, finalStreamUrl, channel);
   watchStartedAt = watchStartedAt || Date.now();
 }
 

@@ -9,14 +9,14 @@ Static Netlify website. The archive root contains `index.html`, `app.js`, `style
 - Dynamic client-side title, description, and JSON-LD when a channel is selected.
 - Owner-supplied Monetag zones: Vignette `12117072`, Popunder `12117037`, and banner `12117045`.
 - Popunder script loading is limited by a 30-minute local-storage timestamp when storage is available. Monetag's own delivery logic may still affect actual impressions and browser behavior.
-- Owner Cloudflare Worker URL for the directory response (`?get_list=true`) and authorized HTTP-only stream URLs encoded in the `proxy_url` query parameter. HTTPS stream URLs are requested directly.
+- Owner Cloudflare Worker URL for the directory response (`?get_list=true`) and authorized HTTP/HTTPS stream URLs encoded in the separate `proxy_url` query parameter. Both native playback and Hls.js use the proxied URL, with a 3-second manifest handshake deadline.
 
 ## Important limitations
 - Presence counts connected sessions, not verified human viewers; multiple tabs/devices and dropped connections can affect the number. Confirm Supabase Realtime Presence is enabled for this project.
 - The Vignette script is not guaranteed to behave as a 5-second skippable pre-roll. Monetag controls ad format, eligibility, and timing. The site does not attempt to fake ad completion or pre-buffer video behind an ad overlay.
 - Client-side dynamic metadata can help the current page experience, but it does not guarantee indexing or rankings. Search engines generally need crawlable page URLs and server-rendered metadata for reliable per-channel indexing.
 - The channel directory is fetched from the owner Worker when the page loads. Its root response must be Base64-encoded UTF-8 containing an M3U playlist or a JSON array of channel objects. The page reports an empty directory as zero channels rather than implying it loaded successfully.
-- The player does not proxy HTTPS streams, spoof headers to evade geographic restrictions, bypass DRM, or defeat access controls. Use only sources you are authorized to watch and redistribute. The Worker can only support authorized HTTP-only sources; it must correctly rewrite HLS child playlists/segments and support CORS/range requests.
+- The player routes HTTP/HTTPS streams through the Worker. It does not bypass DRM or defeat access controls. Use only sources you are authorized to watch and redistribute. The Worker must correctly rewrite HLS child playlists/segments and encryption-key URLs and support CORS/range requests.
 - Adaptive bitrate requires source-provided renditions. A completely dead internet connection cannot receive new live segments. P2P is best-effort and requires compatible peers/network conditions.
 - The Supabase browser publishable key is public by design; do not put a service-role key in client files. Keep RLS policies and abuse controls enabled.
 
