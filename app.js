@@ -1,7 +1,8 @@
 /* JokStream app logic. Use only channels you are authorized to access or redistribute. */
 const CHANNELS_PER_PAGE = 30;
 // The owner Worker serves the directory and proxies sources authorized for use.
-const CHANNEL_DIRECTORY_URL = "https://jokstreampruxy.abdonarjah.workers.dev/";
+const CHANNEL_DIRECTORY_URL = "https://jokstreamproxy1.abdonarjah.workers.dev/";
+const STREAM_HANDSHAKE_TIMEOUT_MS = 800;
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
 // Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
@@ -21,6 +22,7 @@ let allChannels = [];
 let filteredChannels = [];
 let visibleCount = CHANNELS_PER_PAGE;
 let hlsInstance = null;
+let cancelPlaybackAttempt = null;
 let p2pEngineClass = null;
 let shareUnlockedThisSession = false;
 let watchStartedAt = 0;
@@ -142,10 +144,21 @@ async function loadChannels() {
     const response = await fetch(CHANNEL_DIRECTORY_URL, { cache: "no-store" });
     if (!response.ok) throw new Error(`Playlist request failed (${response.status})`);
     // Decode the Worker payload as UTF-8 so Arabic and other channel names remain intact.
-    const binary = atob((await response.text()).trim());
+    const binary = atob((await response.text()).replace(/\s/g, ""));
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const payload = new TextDecoder("utf-8").decode(bytes).trim();
-    allChannels = parseM3U(payload).map(normalizeChannel);
+    const payload = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
+    const directory = payload.startsWith("[") ? JSON.parse(payload) : parseM3U(payload);
+    // A bad entry must not discard the rest of the cached directory.
+    const seen = new Set();
+    allChannels = directory.flatMap((entry) => {
+      try {
+        const channel = normalizeChannel(entry);
+        const key = `${channel.name}|${channel.url}`;
+        if (seen.has(key)) return [];
+        seen.add(key);
+        return [channel];
+      } catch (_) { return []; }
+    });
     allChannels.sort((a, b) => a.name.localeCompare(b.name));
     $("channelCount").textContent = allChannels.length.toLocaleString();
     populateCategories();
@@ -285,6 +298,10 @@ function renderChannels() {
 }
 
 function stopCurrentHls() {
+  if (cancelPlaybackAttempt) {
+    cancelPlaybackAttempt();
+    cancelPlaybackAttempt = null;
+  }
   if (hlsInstance) {
     try { hlsInstance.destroy(); } catch (_) {}
     hlsInstance = null;
@@ -295,7 +312,7 @@ function resolveStreamUrl(channel) {
   try {
     const source = new URL(channel.url);
     if (source.protocol !== "http:" && source.protocol !== "https:") return "";
-    return `https://jokstreampruxy.abdonarjah.workers.dev/${encodeURIComponent(channel.url)}`;
+    return `${CHANNEL_DIRECTORY_URL}${encodeURIComponent(channel.url)}`;
   } catch (_) {
     return "";
   }
@@ -375,19 +392,71 @@ function setPlayerMessage(message, visible = true) {
   $("playerMessage").classList.toggle("hidden", !visible);
 }
 
-function configureAdaptiveHls(videoElement, streamUrl, channel) {
+function configureAdaptiveHls(videoElement, streamUrl, channel, isBackup = false) {
   stopCurrentHls();
-  let networkRecoveryAttempts = 0;
+  let active = true;
+  let handshakeTimer = null;
+  let mediaRecoveryAttempted = false;
+  const listeners = [];
+  const clearHandshake = () => {
+    window.clearTimeout(handshakeTimer);
+    handshakeTimer = null;
+  };
+  cancelPlaybackAttempt = () => {
+    active = false;
+    clearHandshake();
+    listeners.forEach(([event, handler]) => videoElement.removeEventListener(event, handler));
+  };
+  const resetMedia = () => {
+    videoElement.style.visibility = "hidden";
+    videoElement.pause();
+    videoElement.removeAttribute("src");
+    videoElement.load();
+  };
+  const failover = () => {
+    if (!active) return;
+    // Destroying HLS aborts its loaders; clearing src releases native media requests.
+    stopCurrentHls();
+    resetMedia();
+    if (!isBackup) {
+      $("playerStatus").textContent = "Switching to stable backup server...";
+      setPlayerMessage("Switching to stable backup server...", true);
+      // The Worker chooses the mirror server-side. Retry once using its exact route.
+      configureAdaptiveHls(videoElement, resolveStreamUrl(channel), channel, true);
+    } else {
+      $("playerStatus").textContent = "Stream unavailable";
+      setPlayerMessage("The backup server did not respond. Select the channel to try again.", true);
+    }
+  };
+  const ready = () => {
+    if (!active) return;
+    clearHandshake();
+    $("playerStatus").textContent = "Live stream ready · adaptive quality";
+    videoElement.style.visibility = "visible";
+    videoElement.play().then(() => {
+      if (active) setPlayerMessage("", false);
+    }).catch(() => {
+      if (active) setPlayerMessage("Press play to start the stream.", true);
+    });
+  };
+  const listen = (event, handler) => {
+    listeners.push([event, handler]);
+    videoElement.addEventListener(event, handler);
+  };
   const HlsCtor = window.Hls;
-  if (!HlsCtor || !HlsCtor.isSupported()) {
+  const isHls = /\.m3u8$/i.test(new URL(channel.url).pathname);
+  handshakeTimer = window.setTimeout(failover, STREAM_HANDSHAKE_TIMEOUT_MS);
+  if (!isHls || !HlsCtor || !HlsCtor.isSupported()) {
+    listen("loadedmetadata", ready);
+    listen("error", failover);
     videoElement.src = streamUrl;
-    videoElement.play().catch(() => {});
+    videoElement.load();
     return;
   }
   let HlsWithP2P = HlsCtor;
   const P2P = window.p2pml && window.p2pml.hlsjs && window.p2pml.hlsjs.HlsJsP2PEngine;
   if (P2P && typeof P2P.injectMixin === "function") {
-    try { HlsWithP2P = P2P.injectMixin(HlsCtor); } catch (error) { console.warn("P2P engine unavailable; using HLS.js only.", error); }
+    try { HlsWithP2P = P2P.injectMixin(HlsCtor); } catch (_) { /* Use standard HLS. */ }
   }
   const hlsConfig = {
     enableWorker: true,
@@ -401,33 +470,37 @@ function configureAdaptiveHls(videoElement, streamUrl, channel) {
     abrBandWidthFactor: 0.85,
     abrBandWidthUpFactor: 0.65,
     testBandwidth: true,
-    backBufferLength: 30
+    backBufferLength: 30,
+    manifestLoadingTimeOut: STREAM_HANDSHAKE_TIMEOUT_MS,
+    manifestLoadingMaxRetry: 0
   };
   if (HlsWithP2P !== HlsCtor) {
     hlsConfig.p2p = { core: { swarmId: `jokstream-${slugify(channel.name)}-${slugify(channel.group || "live")}` } };
   }
-  hlsInstance = new HlsWithP2P(hlsConfig);
-  hlsInstance.loadSource(streamUrl);
-  hlsInstance.attachMedia(videoElement);
-  hlsInstance.on(HlsCtor.Events.MANIFEST_PARSED, () => {
-    $("playerStatus").textContent = P2P ? "Live stream ready · adaptive quality / P2P when supported" : "Live stream ready · adaptive quality";
-    videoElement.play().then(() => setPlayerMessage("", false)).catch(() => setPlayerMessage("Press play to start the stream.", true));
-  });
-  hlsInstance.on(HlsCtor.Events.LEVEL_SWITCHED, (_event, data) => {
-    const level = hlsInstance && hlsInstance.levels[data.level];
-    if (level && level.height) $("playerStatus").textContent = `Playing · ${level.height}p adaptive quality`;
-  });
-  hlsInstance.on(HlsCtor.Events.ERROR, (_event, data) => {
-    if (!data.fatal) return;
-    $("playerStatus").textContent = "Stream unavailable — try another authorized source";
-    setPlayerMessage("This source may be offline, unsupported, or deny browser playback. Access controls are not bypassed.", true);
-    if (data.type === HlsCtor.ErrorTypes.NETWORK_ERROR && networkRecoveryAttempts < 1) {
-      networkRecoveryAttempts += 1;
-      hlsInstance.startLoad();
-    }
-    else if (data.type === HlsCtor.ErrorTypes.MEDIA_ERROR) hlsInstance.recoverMediaError();
-    else stopCurrentHls();
-  });
+  try {
+    const instance = new HlsWithP2P(hlsConfig);
+    hlsInstance = instance;
+    // Subscribe before loading so even immediate failures are handled.
+    instance.on(HlsCtor.Events.MANIFEST_PARSED, ready);
+    instance.on(HlsCtor.Events.LEVEL_SWITCHED, (_event, data) => {
+      if (!active) return;
+      const level = instance.levels[data.level];
+      if (level && level.height) $("playerStatus").textContent = `Playing · ${level.height}p adaptive quality`;
+    });
+    instance.on(HlsCtor.Events.ERROR, (_event, data) => {
+      if (!active) return;
+      if (data.type === HlsCtor.ErrorTypes.NETWORK_ERROR) {
+        failover();
+      } else if (data.fatal) {
+        if (data.type === HlsCtor.ErrorTypes.MEDIA_ERROR && !mediaRecoveryAttempted) {
+          mediaRecoveryAttempted = true;
+          instance.recoverMediaError();
+        } else failover();
+      }
+    });
+    instance.attachMedia(videoElement);
+    instance.loadSource(streamUrl);
+  } catch (_) { failover(); }
 }
 
 function updateDynamicSeo(channel) {
@@ -496,6 +569,7 @@ function playChannel(channel, selectedButton) {
   document.querySelectorAll(".channel-item.active").forEach((item) => item.classList.remove("active"));
   if (selectedButton) selectedButton.classList.add("active");
   stopCurrentHls();
+  videoElement.style.visibility = "hidden";
   videoElement.pause();
   videoElement.removeAttribute("src");
   videoElement.load();
@@ -505,15 +579,8 @@ function playChannel(channel, selectedButton) {
     setPlayerMessage("This channel URL could not be parsed.", true);
     return;
   }
-  const source = new URL(channel.url);
-  const isHls = /\.m3u8$/i.test(source.pathname);
   $("playerStatus").textContent = "Opening authorized stream through your HTTPS Worker…";
-  if (isHls) {
-    configureAdaptiveHls(videoElement, streamUrl, channel);
-  } else {
-    videoElement.src = streamUrl;
-    videoElement.play().then(() => setPlayerMessage("", false)).catch(() => setPlayerMessage("Press play to start, or try another channel if the source is not supported.", true));
-  }
+  configureAdaptiveHls(videoElement, streamUrl, channel);
   watchStartedAt = watchStartedAt || Date.now();
 }
 
