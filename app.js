@@ -1,7 +1,7 @@
 /* JokStream app logic. Use only channels you are authorized to access or redistribute. */
 const CHANNELS_PER_PAGE = 30;
 // The owner Worker serves the directory and proxies sources authorized for use.
-const CHANNEL_DIRECTORY_URL = "https://jokstreamproxy1.abdonarjah.workers.dev/";
+const CHANNEL_DIRECTORY_URL = "https://jokstreamproxy1.abdonarjah.workers.dev/?get_list=true";
 const STREAM_HANDSHAKE_TIMEOUT_MS = 800;
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
