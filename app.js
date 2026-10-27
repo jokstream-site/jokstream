@@ -2,7 +2,6 @@
 const CHANNELS_PER_PAGE = 30;
 // The owner Worker serves the directory and proxies sources authorized for use.
 const CHANNEL_DIRECTORY_URL = "https://jokstreampruxy.abdonarjah.workers.dev/";
-const AUTHORIZED_STREAM_PROXY_BASE = "https://jokstreampruxy.abdonarjah.workers.dev/";
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
 // Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
@@ -146,13 +145,7 @@ async function loadChannels() {
     const binary = atob((await response.text()).trim());
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
     const payload = new TextDecoder("utf-8").decode(bytes).trim();
-    if (payload.startsWith("[") || payload.startsWith("{")) {
-      const channels = JSON.parse(payload);
-      if (!Array.isArray(channels)) throw new Error("The channel directory response is not a list.");
-      allChannels = channels.map(normalizeChannel);
-    } else {
-      allChannels = parseM3U(payload).map(normalizeChannel);
-    }
+    allChannels = parseM3U(payload).map(normalizeChannel);
     allChannels.sort((a, b) => a.name.localeCompare(b.name));
     $("channelCount").textContent = allChannels.length.toLocaleString();
     populateCategories();
@@ -298,11 +291,11 @@ function stopCurrentHls() {
   }
 }
 
-function resolveStreamUrl(originalUrl) {
+function resolveStreamUrl(channel) {
   try {
-    const source = new URL(originalUrl);
+    const source = new URL(channel.url);
     if (source.protocol !== "http:" && source.protocol !== "https:") return "";
-    return `${AUTHORIZED_STREAM_PROXY_BASE}${encodeURIComponent(source.href)}`;
+    return `https://jokstreampruxy.abdonarjah.workers.dev/${encodeURIComponent(channel.url)}`;
   } catch (_) {
     return "";
   }
@@ -506,7 +499,7 @@ function playChannel(channel, selectedButton) {
   videoElement.pause();
   videoElement.removeAttribute("src");
   videoElement.load();
-  const streamUrl = resolveStreamUrl(channel.url);
+  const streamUrl = resolveStreamUrl(channel);
   if (!streamUrl) {
     $("playerStatus").textContent = "Unsupported stream URL";
     setPlayerMessage("This channel URL could not be parsed.", true);
