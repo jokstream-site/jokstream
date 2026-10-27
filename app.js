@@ -1,8 +1,8 @@
 /* JokStream app logic. Use only channels you are authorized to access or redistribute. */
 const CHANNELS_PER_PAGE = 30;
-// The owner Worker serves the channel directory and can proxy authorized HTTP-only sources.
-const CHANNEL_DIRECTORY_URL = "https://jokstream-proxy.abdonarjah.workers.dev/?get_list=true";
-const AUTHORIZED_HTTP_PROXY_BASE = "https://jokstream-proxy.abdonarjah.workers.dev/?proxy_url=";
+// The owner Worker serves the directory and proxies sources authorized for use.
+const CHANNEL_DIRECTORY_URL = "https://jokstreampruxy.abdonarjah.workers.dev/";
+const AUTHORIZED_STREAM_PROXY_BASE = "https://jokstreampruxy.abdonarjah.workers.dev/";
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
 // Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
@@ -132,6 +132,11 @@ function normalizeChannel(channel) {
 
 async function loadChannels() {
   const list = $("channelList");
+  allChannels = [];
+  filteredChannels = [];
+  visibleCount = CHANNELS_PER_PAGE;
+  $("channelCount").textContent = "0";
+  $("resultsCount").textContent = "Loading channels…";
   list.innerHTML = '<div class="empty-state">Loading the public channel directory…</div>';
   $("playerStatus").textContent = "Loading channel directory";
   try {
@@ -296,9 +301,8 @@ function stopCurrentHls() {
 function resolveStreamUrl(originalUrl) {
   try {
     const source = new URL(originalUrl);
-    if (source.protocol === "https:") return source.href;
-    if (source.protocol !== "http:") return "";
-    return `${AUTHORIZED_HTTP_PROXY_BASE}${encodeURIComponent(source.href)}`;
+    if (source.protocol !== "http:" && source.protocol !== "https:") return "";
+    return `${AUTHORIZED_STREAM_PROXY_BASE}${encodeURIComponent(source.href)}`;
   } catch (_) {
     return "";
   }
@@ -510,9 +514,7 @@ function playChannel(channel, selectedButton) {
   }
   const source = new URL(channel.url);
   const isHls = /\.m3u8$/i.test(source.pathname);
-  $("playerStatus").textContent = source.protocol === "http:"
-    ? "Opening authorized HTTP source through your HTTPS Worker…"
-    : "Opening HTTPS source directly…";
+  $("playerStatus").textContent = "Opening authorized stream through your HTTPS Worker…";
   if (isHls) {
     configureAdaptiveHls(videoElement, streamUrl, channel);
   } else {
