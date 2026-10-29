@@ -54,20 +54,41 @@ function slugify(value) {
 }
 
 function parseM3U(text) {
-  const lines = text.split(/\r?\n/);
+  const lines = String(text ?? "").replace(/^\uFEFF/, "").split(/\r?\n/);
   const channels = [];
   let current = null;
+  const findMetadataSeparator = (line) => {
+    let quote = "";
+    for (let index = line.indexOf(":") + 1; index < line.length; index += 1) {
+      const character = line[index];
+      if (character === "\\" && quote) {
+        index += 1;
+      } else if (quote) {
+        if (character === quote) quote = "";
+      } else if (character === '"' || character === "'") {
+        quote = character;
+      } else if (character === ",") {
+        return index;
+      }
+    }
+    return -1;
+  };
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
+    const line = rawLine.replace(/^\uFEFF/, "").trim();
     if (!line) continue;
-    if (line.startsWith("#EXTINF:")) {
-      const commaIndex = line.lastIndexOf(",");
+    if (/^#EXTINF:/i.test(line)) {
+      const commaIndex = findMetadataSeparator(line);
       const metadata = commaIndex >= 0 ? line.slice(0, commaIndex) : line;
-      const name = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : "Unknown channel";
+      const attributes = Object.fromEntries(
+        [...metadata.matchAll(/([^\s=]+)=("(?:[^"\\]|\\.)*"|'[^']*'|[^\s,]*)/g)]
+          .map((match) => [match[1].toLowerCase(), match[2].replace(/^(?:"|')|(?:"|')$/g, "")])
+      );
+      const name = commaIndex >= 0
+        ? line.slice(commaIndex + 1).trim()
+        : attributes["tvg-name"] || "Unknown channel";
       const attr = (key) => {
-        const match = metadata.match(new RegExp(`${key}="([^"]*)"`));
-        return match ? match[1] : "";
+        return attributes[key.toLowerCase()] || "";
       };
       current = {
         name: safeText(name, 140) || "Unknown channel",
@@ -96,6 +117,24 @@ function parseM3U(text) {
     seen.add(key);
     return true;
   });
+}
+
+function decodePlaylistPayload(raw) {
+  const text = String(raw ?? "").replace(/^\uFEFF/, "").trim();
+  if (!text || /^#EXTM3U\b/i.test(text) || /^#EXTINF:/i.test(text)) return text;
+
+  const compact = text.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(compact) || compact.length % 4 === 1) return text;
+  try {
+    const base64 = compact.replace(/-/g, "+").replace(/_/g, "/");
+    const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      .replace(/^\uFEFF/, "").trim();
+    return /^#(?:EXTM3U|EXTINF:)/i.test(decoded) ? decoded : text;
+  } catch (_) {
+    return text;
+  }
 }
 
 function normalizeChannel(channel) {
@@ -142,9 +181,7 @@ async function loadChannels() {
     const response = await fetch(CHANNEL_DIRECTORY_URL, { cache: "no-store" });
     if (!response.ok) throw new Error(`Playlist request failed (${response.status})`);
     // Decode the Worker payload as UTF-8 so Arabic and other channel names remain intact.
-    const binary = atob((await response.text()).trim());
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const payload = new TextDecoder("utf-8").decode(bytes).trim();
+    const payload = decodePlaylistPayload(await response.text());
     allChannels = parseM3U(payload).map(normalizeChannel);
     allChannels.sort((a, b) => a.name.localeCompare(b.name));
     $("channelCount").textContent = allChannels.length.toLocaleString();
@@ -295,7 +332,13 @@ function resolveStreamUrl(channel) {
   try {
     const source = new URL(channel.url);
     if (source.protocol !== "http:" && source.protocol !== "https:") return "";
-    return `https://jokstreampruxy.abdonarjah.workers.dev/${encodeURIComponent(channel.url)}`;
+    const proxy = new URL(CHANNEL_DIRECTORY_URL);
+    if (source.origin === proxy.origin && source.searchParams.has("proxy_url")) {
+      return source.href;
+    }
+    proxy.searchParams.delete("get_list");
+    proxy.searchParams.set("proxy_url", source.href);
+    return proxy.href;
   } catch (_) {
     return "";
   }
@@ -490,6 +533,7 @@ function playChannel(channel, selectedButton) {
   openPlayerOverlay(channel);
   setChatRoom(channel);
   const videoElement = $("jokstreamPlayer");
+  videoElement.crossOrigin = "anonymous";
   $("nowPlayingTitle").textContent = channel.name;
   setPlayerMessage("Loading stream…", true);
   $("playerStatus").textContent = "Connecting to stream…";
