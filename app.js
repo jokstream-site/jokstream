@@ -132,6 +132,25 @@ function normalizeChannel(channel) {
   };
 }
 
+function decodeChannelDirectory(text) {
+  let payload = text.trim();
+  let encoding = "direct";
+  const isDirectory = (value) => /^(?:#EXTM3U(?:\s|$)|#EXTINF:|\[)/.test(value);
+  if (!isDirectory(payload)) {
+    const binary = atob(payload.replace(/\s/g, ""));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    payload = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
+    encoding = "base64";
+  }
+  if (!isDirectory(payload)) throw new Error("Unsupported directory format.");
+  const format = payload.startsWith("[") ? "json" : "m3u";
+  const directory = format === "json" ? JSON.parse(payload) : parseM3U(payload);
+  return {
+    directory, encoding, format,
+    extinfCount: format === "m3u" ? (payload.match(/^\s*#EXTINF:/gm) || []).length : 0
+  };
+}
+
 async function loadChannels() {
   const list = $("channelList");
   allChannels = [];
@@ -141,25 +160,35 @@ async function loadChannels() {
   $("resultsCount").textContent = "Loading channels…";
   list.innerHTML = '<div class="empty-state">Loading the public channel directory…</div>';
   $("playerStatus").textContent = "Loading channel directory";
+  const diagnostics = {
+    stage: "request", status: null, responseBytes: 0, encoding: "unknown", format: "unknown",
+    extinfCount: 0, parsedEntries: 0, rejectedEntries: 0, duplicateEntries: 0, acceptedChannels: 0
+  };
   try {
     const response = await fetch(CHANNEL_DIRECTORY_URL, { cache: "no-store" });
+    diagnostics.status = response.status;
+    diagnostics.stage = "http";
     if (!response.ok) throw new Error(`Playlist request failed (${response.status})`);
-    // Decode the Worker payload as UTF-8 so Arabic and other channel names remain intact.
-    const binary = atob((await response.text()).replace(/\s/g, ""));
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const payload = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
-    const directory = payload.startsWith("[") ? JSON.parse(payload) : parseM3U(payload);
+    diagnostics.stage = "read";
+    const text = await response.text();
+    diagnostics.responseBytes = new TextEncoder().encode(text).byteLength;
+    diagnostics.stage = "decode-and-parse";
+    const { directory, encoding, format, extinfCount } = decodeChannelDirectory(text);
+    Object.assign(diagnostics, { encoding, format, extinfCount, parsedEntries: directory.length });
+    diagnostics.stage = "normalize";
     // A bad entry must not discard the rest of the cached directory.
     const seen = new Set();
     allChannels = directory.flatMap((entry) => {
       try {
         const channel = normalizeChannel(entry);
         const key = `${channel.name}|${channel.url}`;
-        if (seen.has(key)) return [];
+        if (seen.has(key)) { diagnostics.duplicateEntries++; return []; }
         seen.add(key);
         return [channel];
-      } catch (_) { return []; }
+      } catch (_) { diagnostics.rejectedEntries++; return []; }
     });
+    diagnostics.acceptedChannels = allChannels.length;
+    diagnostics.stage = "render";
     allChannels.sort((a, b) => a.name.localeCompare(b.name));
     $("channelCount").textContent = allChannels.length.toLocaleString();
     populateCategories();
@@ -171,8 +200,11 @@ async function loadChannels() {
       $("playerStatus").textContent = "Channel directory is empty";
       list.innerHTML = '<div class="empty-state">No channels are currently published by the Worker.</div>';
     }
-  } catch (error) {
-    console.error("Could not load IPTV playlist:", error);
+    diagnostics.stage = "complete";
+    // Only aggregate metadata: never log payloads, source URLs, names, or raw errors.
+    console.info("Channel directory diagnostics", diagnostics);
+  } catch (_) {
+    console.error("Channel directory diagnostics", diagnostics);
     allChannels = [];
     filteredChannels = [];
     $("channelCount").textContent = "0";
