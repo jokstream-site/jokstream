@@ -1,7 +1,7 @@
 /* JokStream app logic. Use only channels you are authorized to access or redistribute. */
 const CHANNELS_PER_PAGE = 30;
 // The owner Worker serves the directory and proxies sources authorized for use.
-const CHANNEL_DIRECTORY_URL = "https://jokstreampruxy.abdonarjah.workers.dev/";
+const CHANNEL_DIRECTORY_URL = "https://jokstream-api.abdonarjah.workers.dev/";
 const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
 
 // Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
