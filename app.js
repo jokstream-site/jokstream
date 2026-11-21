@@ -2,7 +2,8 @@
 const JOKFLIX_API = "https://jokflix.abdonarjah.workers.dev";
 const JOKSTREAM_API = "https://jokstream-api.abdonarjah.workers.dev";
 const TMDB_IMAGE = "https://image.tmdb.org/t/p/";
-const VIDSRC = "https://vidsrc.sh";
+const VIDSRC_HOSTS = ["https://vidsrc.sh","https://vidsrc2.ru","https://vidsrc.ir"];
+const VIDSRC = VIDSRC_HOSTS[0];
 const $ = (id) => document.getElementById(id);
 const state = {
   route: "home", browseType: "movie", browsePage: 1, browseSort: "popularity.desc",
@@ -198,10 +199,10 @@ function activatePlayerShield(){
 function sendPlayerCommand(action,value){
   const frame=$("embedStage").querySelector("iframe");if(!frame?.contentWindow){toast("The player is not ready yet.",true);return;}
   const message={player:true,action};if(value!==undefined)message.value=value;
-  frame.contentWindow.postMessage(message,VIDSRC);
+  frame.contentWindow.postMessage(message,"*");
 }
 window.addEventListener("message",event=>{
-  if(!event.origin.startsWith("https://")||!event.origin.includes("vidsrc.sh"))return;
+  let eventHost="";try{eventHost=new URL(event.origin).hostname.toLowerCase()}catch{return}if(!["vidsrc.sh","vidsrc2.ru","vidsrc.ir"].includes(eventHost))return;
   let payload=event.data;if(typeof payload==="string"){try{payload=JSON.parse(payload)}catch{return}}
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
