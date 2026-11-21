@@ -185,7 +185,9 @@ function buildEmbedUrl(item,type,season,episode){
   const url=new URL(path,VIDSRC);
   url.searchParams.set("autoplay","1");
   url.searchParams.set("colour","00ff9d");
-  url.searchParams.set("ds_lang","en,ar");
+  const preferred=String($("subtitleLanguage")?.value||"ar,es,fr").toLowerCase().split(",").map(x=>x.trim()).filter(x=>/^[a-z]{2,3}$/.test(x));
+  const subtitlePriority=[...new Set(preferred.length?preferred:["ar","es","fr"])].slice(0,3);
+  url.searchParams.set("ds_lang",subtitlePriority.join(","));
   if(type==="tv")url.searchParams.set("autonext","1");
   return url.toString();
 }
@@ -256,6 +258,7 @@ function attachSubtitle(item,file){
   toast("External subtitle selected. The player will load it when supported.");
 }
 function openSubtitles(){if(!state.current){toast("Open a movie or series first.",true);return;}$("subtitleModal").classList.add("open");$("subtitleModal").setAttribute("aria-hidden","false");$("subtitleResults").innerHTML='<p class="muted">Choose your preferred languages and search for available subtitles.</p>';}
+function applySubtitlePreferences(){if(!state.current){toast("Open a movie or series first.",true);return;}const frame=$("embedStage").querySelector("iframe");if(!frame){toast("The player is not ready yet.",true);return;}const episode=state.currentEpisode;frame.src=buildEmbedUrl(state.current,state.currentType,episode?.season,episode?.episode);setPlayerShield(false);$("playerState").textContent="UPDATING SUBTITLES";closeModal("subtitleModal");toast("Subtitle language priority updated. Restart playback if needed.");}
 function normalizeChannel(item){
   const id=item.stream_id??item.id??item.streamId;
   return {id:String(id??""),name:safe(item.name||item.title||"Unknown channel"),category:String(item.category_id??item.categoryId??""),categoryName:safe(item.category_name||item.categoryName||"Other"),logo:item.stream_icon||item.streamIcon||item.logo||"",country:item.country||""};
@@ -340,7 +343,7 @@ function setupEvents(){
   $("channelSearch").oninput=e=>{state.liveSearch=e.target.value;renderChannels();};
   $("liveFullscreen").onclick=()=>{const v=$("liveVideo");if(v.requestFullscreen)v.requestFullscreen();};
   document.querySelectorAll("[data-command]").forEach(b=>b.onclick=()=>{const a=b.dataset.command;sendPlayerCommand(a);if(a==="rate+"||a==="rate-"){state.currentRate=Math.max(.25,Math.min(4,state.currentRate+(a==="rate+"?.25:-.25)));$("playbackRate").textContent=state.currentRate.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")+"×";}});
-  $("openSubtitles").onclick=openSubtitles;$("subtitleSearchButton").onclick=searchSubtitles;
+  $("openSubtitles").onclick=openSubtitles;$("subtitleSearchButton").onclick=searchSubtitles;$("applySubtitlePrefs").onclick=applySubtitlePreferences;
   $("detailsModal").addEventListener("click",e=>{if(e.target.id==="detailsModal")closeModal("detailsModal");});
   $("playerModal").addEventListener("click",e=>{if(e.target.id==="playerModal"){closeModal("playerModal");$("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());}});
   document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal("detailsModal");closeModal("subtitleModal");if($("playerModal").classList.contains("open")){closeModal("playerModal");$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}}});
