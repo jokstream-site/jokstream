@@ -96,14 +96,14 @@ async function resolveProviderItem(entry,type){
  return {...details,id:Number(id),media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added};
 }
 async function loadBrowse(reset=false){
- if(reset){state.browseLoading=false;$("browseGrid").replaceChildren();state.browsePage=1;state.browseRequest=(state.browseRequest||0)+1;}
+ if(reset){state.browseLoading=false;state.browseRetry=false;$("browseGrid").replaceChildren();state.browsePage=1;state.browseRequest=(state.browseRequest||0)+1;}
  if(state.browseLoading)return;
  const request=state.browseRequest||0,type=state.browseType,page=state.browsePage;
- state.browseLoading=true;$("sortSelect").disabled=true;$("sortSelect").innerHTML='<option>Recently added · VidSrc catalogue</option>';$("browseCount").textContent="Connecting to VidSrc catalogue…";$("loadMoreTitles").hidden=true;
+ state.browseLoading=true;state.browseRetry=false;$("sortSelect").disabled=true;$("sortSelect").innerHTML='<option>Recently added · VidSrc catalogue</option>';$("browseCount").textContent="Loading page "+page+" · up to 50 titles…";$("loadMoreTitles").hidden=true;$("loadMoreTitles").textContent="Loading next 50 titles…";
  try{
   const d=await providerCatalogPage(type,page);if(request!==state.browseRequest)return;
   const entries=d.result||[];if(!entries.length){$("browseCount").textContent="No titles found in this catalogue page.";$("browseGrid").innerHTML='<div class="empty-state">No titles are available on this page.</div>';return;}
-  $("browseCount").textContent="VidSrc catalogue · "+entries.length+" titles · Enriching details…";
+  $("browseCount").textContent="VidSrc catalogue · "+entries.length+" titles in this page · Loading details progressively…";
   let shown=0,matched=0;
   for(let i=0;i<entries.length;i+=8){
    const batch=entries.slice(i,i+8);
@@ -113,14 +113,14 @@ async function loadBrowse(reset=false){
    filtered.forEach(item=>$("browseGrid").append(card(item,type)));shown+=filtered.length;matched+=filtered.length;
    $("browseCount").textContent="VidSrc catalogue · "+shown+" of "+entries.length+" titles loaded";
   }
-  $("browseCount").textContent="VidSrc catalogue · Page "+page+" of "+Number(d.pages||1).toLocaleString()+" · "+matched+" titles";
-  $("loadMoreTitles").hidden=!d.pages||page>=d.pages;
+  $("browseCount").textContent="VidSrc catalogue · Page "+page+" of "+Number(d.pages||1).toLocaleString()+" · "+matched+" titles loaded · 50 per page";
+  $("loadMoreTitles").hidden=!d.pages||page>=d.pages;$("loadMoreTitles").textContent=page>=Number(d.pages||page)?"Catalogue complete":"Scroll to load the next 50";
   if(!matched)$("browseGrid").innerHTML='<div class="empty-state">No titles matched this filter. Choose All or another genre.</div>';
  }catch(e){
   if(request!==state.browseRequest)return;
   $("browseCount").textContent="Catalogue connection failed";
   $("browseGrid").innerHTML='<div class="empty-state">Could not load VidSrc catalogue: '+escapeHtml(e.message)+' · Please retry.</div>';
-  $("loadMoreTitles").hidden=true;toast(e.message,true);
+  state.browseRetry=true;$("loadMoreTitles").hidden=false;$("loadMoreTitles").textContent="Retry loading this page";toast(e.message,true);
  }finally{if(request===state.browseRequest)state.browseLoading=false;}
 }
 async function showDetails(item,type="movie"){
@@ -312,7 +312,7 @@ function setupEvents(){
     const route=event.target.closest("[data-route]")?.dataset.route;if(route){event.preventDefault();showView(route);}
     const close=event.target.closest("[data-close]")?.dataset.close;if(close){closeModal(close==="details"?"detailsModal":close==="player"?"playerModal":"subtitleModal");if(close==="player"){$("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());}}
   });
-  $("loadMoreTitles").onclick=()=>{state.browsePage++;loadBrowse(false);};
+  $("loadMoreTitles").onclick=()=>{if(state.browseLoading)return;if(!state.browseRetry)state.browsePage++;loadBrowse(false);};
   $("sortSelect").onchange=()=>{state.browsePage=1;loadBrowse(true);};
   $("globalSearch").addEventListener("keydown",e=>{if(e.key==="Enter")runSearch(e.target.value);});
   $("searchButton").onclick=()=>runSearch($("globalSearch").value);
@@ -327,6 +327,11 @@ function setupEvents(){
   $("seasonSelect").onchange=()=>loadEpisodes(state.current.id,Number($("seasonSelect").value));
 }
 document.addEventListener("DOMContentLoaded",()=>{
+  const more=$("loadMoreTitles");
+  if("IntersectionObserver" in window&&more){
+    const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(entry.isIntersecting&&!more.hidden&&!state.browseLoading&&!state.browseRetry){state.browsePage++;loadBrowse(false);}}},{root:null,rootMargin:"700px 0px",threshold:0});
+    observer.observe(more);
+  }
   $("year").textContent=new Date().getFullYear();setupPopupProtection();setupEvents();home();
   $("liveVideo").addEventListener("playing",()=>$("liveStatus").textContent="Playing live");$("liveVideo").addEventListener("waiting",()=>$("liveStatus").textContent="Buffering live stream…");$("liveVideo").addEventListener("error",()=>$("liveStatus").textContent="Stream could not be played. Try another channel.");
 });
