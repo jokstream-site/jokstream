@@ -154,7 +154,7 @@ async function showDetails(item,type="movie"){
     if(state.currentType==="tv"&&d.number_of_seasons)facts.push(["SEASONS",d.number_of_seasons]);
     $("detailsFacts").replaceChildren(...facts.map(([k,v])=>{const f=document.createElement("div");f.className="fact";const a=document.createElement("small");a.textContent=k;const b=document.createElement("b");b.textContent=v;f.append(a,b);return f;}));
     const cast=(d.credits?.cast||[]).slice(0,12);$("detailsCast").replaceChildren(...cast.map(p=>{const s=document.createElement("span");s.className="cast-chip";s.textContent=p.name;return s;}));if(!cast.length)$("detailsCast").textContent="Cast information unavailable.";
-    const trailer=(d.videos?.results||[]).find(v=>v.site==="YouTube"&&v.type==="Trailer"&&v.key);if(trailer){$("detailsTrailer").hidden=false;$("detailsTrailer").onclick=()=>window.open("https://www.youtube.com/watch?v="+encodeURIComponent(trailer.key),"_blank","noopener,noreferrer");}
+    const trailer=(d.videos?.results||[]).find(v=>v.site==="YouTube"&&v.type==="Trailer"&&v.key)|| (d.videos?.results||[]).find(v=>v.site==="YouTube"&&v.key);const trailerHost=$("detailsTrailerFrame");trailerHost.replaceChildren();trailerHost.hidden=!trailer;if(trailer){const frame=document.createElement("iframe");frame.src="https://www.youtube-nocookie.com/embed/"+encodeURIComponent(trailer.key)+"?rel=0&modestbranding=1";frame.title=titleOf(d)+" official trailer";frame.allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";frame.allowFullscreen=true;frame.loading="lazy";frame.referrerPolicy="strict-origin-when-cross-origin";trailerHost.append(frame);$("detailsTrailer").hidden=false;$("detailsTrailer").textContent="▶ Play trailer";$("detailsTrailer").onclick=()=>trailerHost.scrollIntoView({behavior:"smooth",block:"center"});}else{$("detailsTrailer").hidden=true;}
     const similar=(d.similar?.results||[]).filter(x=>x.poster_path).slice(0,12);similar.forEach(x=>$("similarRow").append(card(x,state.currentType)));
     if(state.currentType==="tv"){const seasons=(d.seasons||[]).filter(s=>s.season_number>=0);$("seasonsPanel").hidden=false;$("seasonSelect").replaceChildren(...seasons.map(s=>{const o=document.createElement("option");o.value=s.season_number;o.textContent=s.name||"Season "+s.season_number;return o;}));$("seasonSelect").onchange=()=>loadEpisodes(d.id,Number($("seasonSelect").value));const first=seasons.find(s=>s.season_number>0)||seasons[0];if(first){$("seasonSelect").value=first.season_number;loadEpisodes(d.id,first.season_number);}}
   }catch(e){$("detailsOverview").textContent=e.message;}
@@ -177,7 +177,7 @@ async function renderMyList(){
   if(!state.myList.length){host.innerHTML='<div class="empty-state">Your list is empty. Add a movie or series to keep it here.</div>';return;}
   for(const item of state.myList){let full=item;try{full=await tmdb(item.type+"/"+item.id);}catch{}host.append(card(full,item.type));}
 }
-function closeModal(id){$(id).classList.remove("open");$(id).setAttribute("aria-hidden","true");}
+function closeModal(id){$(id).classList.remove("open");$(id).setAttribute("aria-hidden","true");if(id==="detailsModal"){$("detailsTrailerFrame")?.replaceChildren();$("detailsTrailerFrame").hidden=true;}}
 function progressKey(type,id,season,episode){return "jokstream_progress:"+type+":"+id+(type==="tv"?":"+season+":"+episode:"");}
 function buildEmbedUrl(item,type,season,episode){
   const mediaId=item.imdb_id||item.id;
