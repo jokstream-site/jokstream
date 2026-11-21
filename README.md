@@ -1,27 +1,62 @@
-# JokStream Ultimate Clean Edition
+# JOKSTREAM
 
-Static Netlify website. The archive root contains `index.html`, `app.js`, `style.css`, `sw.js`, `manifest.json`, `_headers`, and icons.
+A responsive English-language streaming interface that brings Live TV, movies and series into one application.
 
-## Included
-- Full-screen same-page channel overlay: video above, channel chat below, with a close button.
-- Supabase Realtime shared chat and Presence-based count of connected sessions in the selected room.
-- Hls.js adaptive bitrate for HLS manifests that contain multiple renditions; P2P Media Loader is attempted when its library and browser support are available.
-- Dynamic client-side title, description, and JSON-LD when a channel is selected.
-- Owner-supplied Monetag zones: Vignette `12117072`, Popunder `12117037`, and banner `12117045`.
-- Popunder script loading is limited by a 30-minute local-storage timestamp when storage is available. Monetag's own delivery logic may still affect actual impressions and browser behavior.
-- Owner Cloudflare Worker URL for the directory response (`?get_list=true`) and authorized HTTP/HTTPS stream URLs encoded in the `proxy_url` query parameter.
+## Architecture
 
-## Important limitations
-- Presence counts connected sessions, not verified human viewers; multiple tabs/devices and dropped connections can affect the number. Confirm Supabase Realtime Presence is enabled for this project.
-- The Vignette script is not guaranteed to behave as a 5-second skippable pre-roll. Monetag controls ad format, eligibility, and timing. The site does not attempt to fake ad completion or pre-buffer video behind an ad overlay.
-- Client-side dynamic metadata can help the current page experience, but it does not guarantee indexing or rankings. Search engines generally need crawlable page URLs and server-rendered metadata for reliable per-channel indexing.
-- The channel directory is fetched from the owner Worker when the page loads. Its root response may be plain-text M3U or Base64-encoded UTF-8 M3U. The page reports an empty directory as zero channels rather than implying it loaded successfully.
-- Stream requests are sent to the owner Worker through `proxy_url`; the browser requests media from that HTTPS URL, including its normal `Range` requests. The Worker must preserve upstream `206 Partial Content` responses and the relevant `Content-Range`, `Accept-Ranges`, `Content-Length`, and `Content-Type` headers, and provide CORS headers (including exposed range headers). For HLS, it must also rewrite child playlist and segment URLs through the proxy. Use only sources you are authorized to watch and redistribute; do not use the Worker to bypass DRM, geographic restrictions, or other access controls.
-- Adaptive bitrate requires source-provided renditions. A completely dead internet connection cannot receive new live segments. P2P is best-effort and requires compatible peers/network conditions.
-- The Supabase browser publishable key is public by design; do not put a service-role key in client files. Keep RLS policies and abuse controls enabled.
+- **Frontend:** Static HTML, CSS and JavaScript in the repository root.
+- **Live TV:** Cloudflare Worker at `https://jokstream-api.abdonarjah.workers.dev`.
+- **Movie and series discovery:** TMDB API through the JOKFLIX Cloudflare Worker at `https://jokflix.abdonarjah.workers.dev`.
+- **Playback:** VidSrc embeds using TMDB IDs.
+- **External subtitles:** OpenSubtitles endpoints exposed by the JOKSTREAM API Worker.
 
-## Netlify deployment
-Upload the ZIP contents to the site's publish root, not as a nested ZIP file. Confirm `index.html` and `sw.js` are at the root. After deployment, verify `https://YOUR-DOMAIN/sw.js` loads the supplied Monetag service worker, then complete verification in Monetag.
+## Cloudflare services
 
-## Checks
-This package was checked for ZIP integrity and JavaScript syntax locally. Live channel playback, the Cloudflare Worker, actual Monetag delivery, and cross-device Presence/chat must still be tested on the deployed domain.
+### JOKFLIX
+
+The `jokflix` Worker is a server-side TMDB gateway. It uses the existing Cloudflare secret bindings:
+
+- `TMDB_TOKEN` (Bearer token, preferred)
+- `TMDB_API_KEY` (API key fallback)
+
+The public frontend calls `/api/{tmdb-path}`. TMDB credentials are never sent to the browser. Example endpoints:
+
+- `/health`
+- `/api/trending/movie/week?language=en-US`
+- `/api/movie/{tmdb_id}?append_to_response=credits,videos,similar,external_ids`
+- `/api/tv/{tmdb_id}/season/{season_number}`
+
+### JOKSTREAM API
+
+The existing `jokstream-api` Worker is used for the live channel catalogue, stream relay and external subtitles:
+
+- `GET /api/catalog?kind=live&page=1&limit=100`
+- `GET /stream/live/{stream_id}.ts`
+- `GET /api/subtitles?query={title}&type=movie&languages=en,ar`
+- `GET /api/subtitles/download?file_id={file_id}`
+
+The Worker has existing D1, KV and secret bindings. Keep provider credentials and subtitle API keys in Cloudflare secrets; never copy them into frontend files.
+
+## Playback and popup restrictions
+
+VidSrc supports movie and TV embeds by TMDB or IMDB ID, subtitle language preferences, custom subtitle URLs, player events and parent-page playback commands. JOKSTREAM uses a sandboxed cross-origin iframe without the `allow-popups` permission, plus parent-page popup hardening. The iframe sandbox can affect third-party player features; test playback on the target browsers. A parent page cannot guarantee control over every popup or overlay created internally by a third-party provider.
+
+External subtitles are fetched through the JOKSTREAM API Worker and passed to VidSrc as a HTTPS `sub_url`. Built-in VidSrc subtitle selection remains available in the provider player.
+
+## Deployment
+
+The repository is a static site. Publish the repository root with your configured static host (the original project was prepared for Netlify). The publish directory must contain `index.html`, `app.js`, `style.css`, `manifest.json` and the `icons/` directory.
+
+If the Git repository is connected to Netlify, commits to `main` can trigger its configured build/deploy pipeline. Otherwise, upload the root directory to your static host.
+
+## Release checks
+
+1. Open the JOKFLIX Worker `/health` endpoint and confirm `tmdbConfigured: true`.
+2. Open `/api/trending/movie/week?language=en-US` and confirm a TMDB `results` array is returned.
+3. Open the JOKSTREAM API `/health` endpoint and confirm the database and cache are connected.
+4. Open `/api/catalog?kind=live&page=1&limit=100` and confirm the channel list is returned.
+5. Test a live stream, a movie, a TV episode, built-in subtitles, and an external subtitle track in the browsers you intend to support.
+
+## Rights and availability
+
+Use only live streams and video sources you are authorized to access and distribute. TMDB provides discovery metadata and artwork; VidSrc availability is controlled by the third-party provider and is not guaranteed by JOKSTREAM. No client-side overlay can guarantee suppression of all third-party popups.
