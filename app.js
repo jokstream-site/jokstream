@@ -2,7 +2,7 @@
 const JOKFLIX_API = "https://jokflix.abdonarjah.workers.dev";
 const JOKSTREAM_API = "https://jokstream-api.abdonarjah.workers.dev";
 const TMDB_IMAGE = "https://image.tmdb.org/t/p/";
-const VIDSRC_HOSTS = ["https://vidsrc.sh","https://vidsrc2.ru","https://vidsrc.ir"];
+const VIDSRC_HOSTS = ["https://vidsrc.su"];
 const VIDSRC = VIDSRC_HOSTS[0];
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -180,12 +180,13 @@ async function renderMyList(){
 function closeModal(id){$(id).classList.remove("open");$(id).setAttribute("aria-hidden","true");}
 function progressKey(type,id,season,episode){return "jokstream_progress:"+type+":"+id+(type==="tv"?":"+season+":"+episode:"");}
 function buildEmbedUrl(item,type,season,episode){
-  const mediaId=item.imdb_id||item.id;const url=new URL(type==="tv"?"/embed/tv/"+mediaId+(season?"/"+season+"/"+episode:""):"/embed/movie/"+mediaId,VIDSRC);
-  url.searchParams.set("ds_lang","en,ar");
-  if(type==="tv"&&!season)url.searchParams.set("autonext","1");
-  const saved=readStore(progressKey(type,item.id,season,episode),null);
-  if(saved&&Number(saved.time)>20&&(!saved.duration||Number(saved.duration)-Number(saved.time)>45))url.searchParams.set("startAt",String(Math.floor(saved.time)));
-  if(state.selectedSubtitle){url.searchParams.set("sub_url",state.selectedSubtitle.url);url.searchParams.set("sub_label",state.selectedSubtitle.label);url.searchParams.set("sub_lang",state.selectedSubtitle.language);}
+  const mediaId=item.imdb_id||item.id;
+  const path=type==="tv"?"/tv/"+mediaId+(season?"/"+season+"/"+episode:""):"/movie/"+mediaId;
+  const url=new URL(path,VIDSRC);
+  url.searchParams.set("autoplay","true");
+  url.searchParams.set("colour","00ff9d");
+  url.searchParams.set("backbutton","https://jokstream-site.abdonarjah.workers.dev/");
+  if(type==="tv")url.searchParams.set("autonextepisode","true");
   return url.toString();
 }
 function playVOD(item,type="movie",season=null,episode=null){
@@ -227,7 +228,7 @@ function sendPlayerCommand(action,value){
   frame.contentWindow.postMessage(message,"*");
 }
 window.addEventListener("message",event=>{
-  let eventHost="";try{eventHost=new URL(event.origin).hostname.toLowerCase()}catch{return}if(!["vidsrc.sh","vidsrc2.ru","vidsrc.ir"].includes(eventHost))return;
+  let eventHost="";try{eventHost=new URL(event.origin).hostname.toLowerCase()}catch{return}if(!["vidsrc.su"].includes(eventHost))return;
   let payload=event.data;if(typeof payload==="string"){try{payload=JSON.parse(payload)}catch{return}}
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
