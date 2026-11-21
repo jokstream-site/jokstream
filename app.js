@@ -7,7 +7,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   route: "home", browseType: "movie", browsePage: 1, browseSort: "popularity.desc",
   genre: "", current: null, currentType: "movie", currentEpisode: null, currentDetails: null,
-  liveChannels: [], liveCategories: [], liveCategory: "", liveSearch: "", liveEngine: null,
+  liveChannels: [], liveRendered: 0, liveCategories: [], liveCategory: "", liveSearch: "", liveEngine: null,
   subtitleContext: null, selectedSubtitle: null, progress: {}, myList: readStore("jokstream_mylist", []),
   lastResults: [], searchQuery: "", currentRate: 1
 };
@@ -77,13 +77,28 @@ function buildGenres(){
   const all=document.createElement("button");all.className="genre-pill active";all.textContent="All";all.onclick=()=>{state.genre="";host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===all));state.browsePage=1;loadBrowse(true);};host.append(all);
   staticGenres.forEach(([id,label])=>{const b=document.createElement("button");b.className="genre-pill";b.textContent=label;b.onclick=()=>{state.genre=String(id);host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));state.browsePage=1;loadBrowse(true);};host.append(b);});
 }
+async function providerCatalogPage(type,page=1){
+ const endpoint=type==="tv"?"tvshows":"movies",r=await fetch("https://vidsrc.sh/"+endpoint+"/latest/page-"+page+".json",{headers:{Accept:"application/json"}});
+ if(!r.ok)throw new Error("VidSrc catalogue request failed ("+r.status+")");const d=await r.json();if(!Array.isArray(d.result))throw new Error("Invalid VidSrc catalogue response");return d;
+}
+async function resolveProviderItem(entry,type){
+ let id=entry.tmdb_id?String(entry.tmdb_id):"";
+ if(!id&&entry.imdb_id){try{const f=await tmdb("find/"+entry.imdb_id,{external_source:"imdb_id"});id=String(((type==="tv"?f.tv_results:f.movie_results)||[])[0]?.id||"");}catch{}}
+ if(!id)return null;try{return {...await tmdb(type+"/"+id),id:Number(id),media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added};}catch{return null;}
+}
+async function resolveProviderBatch(entries,type){
+ const out=[];for(let i=0;i<entries.length;i+=8){out.push(...(await Promise.all(entries.slice(i,i+8).map(x=>resolveProviderItem(x,type)))).filter(Boolean));}return out;
+}
 async function loadBrowse(reset=false){
-  if(reset){$("browseGrid").replaceChildren();state.browsePage=1;}
-  const type=state.browseType,sort=$("sortSelect").value||"popularity.desc";state.browseSort=sort;
-  const params={page:state.browsePage,sort_by:sort};
-  if(state.genre)params.with_genres=state.genre;
-  try{const d=await tmdb("discover/"+type,params);(d.results||[]).filter(x=>x.poster_path).forEach(x=>$("browseGrid").append(card(x,type)));$("browseCount").textContent=(d.total_results||0).toLocaleString()+" titles";$("loadMoreTitles").hidden=!d.total_pages||state.browsePage>=d.total_pages;}
-  catch(e){toast(e.message,true);$("browseGrid").innerHTML='<div class="empty-state">The catalogue could not be loaded. Please try again.</div>';}
+ if(reset){$("browseGrid").replaceChildren();state.browsePage=1;}
+ const type=state.browseType;$("sortSelect").disabled=true;$("sortSelect").innerHTML='<option>Recently added · VidSrc catalogue</option>';$("browseCount").textContent="Loading provider catalogue…";
+ try{
+  const d=await providerCatalogPage(type,state.browsePage),items=await resolveProviderBatch(d.result,type);
+  if(reset)$("browseGrid").replaceChildren();items.forEach(x=>$("browseGrid").append(card(x,type)));
+  $("browseCount").textContent="VidSrc catalogue · Page "+state.browsePage+" of "+Number(d.pages||1).toLocaleString()+" · 50 entries per page";
+  $("loadMoreTitles").hidden=!d.pages||state.browsePage>=d.pages;
+  if(!items.length)$("browseGrid").innerHTML='<div class="empty-state">No titles on this page matched TMDB metadata. Try the next page.</div>';
+ }catch(e){$("browseCount").textContent="Provider catalogue unavailable";$("browseGrid").innerHTML='<div class="empty-state">Could not load VidSrc catalogue: '+escapeHtml(e.message)+'</div>';$("loadMoreTitles").hidden=true;toast(e.message,true);}
 }
 async function showDetails(item,type="movie"){
   state.current=item;state.currentType=type==="tv"||type==="series"?"tv":"movie";state.currentEpisode=null;state.selectedSubtitle=null;
@@ -141,12 +156,12 @@ function playVOD(item,type="movie",season=null,episode=null){
   if(!item)return;state.current=item;state.currentType=type;state.currentEpisode=type==="tv"?{season,episode}:null;
   closeModal("detailsModal");$("playerModal").classList.add("open");$("playerModal").setAttribute("aria-hidden","false");
   $("playerTitle").textContent=titleOf(item)+(type==="tv"&&season?" · S"+season+" E"+episode:"");
-  $("playerState").textContent="LOADING";$("embedPlaceholder").hidden=false;$("embedPlaceholder").querySelector("b").textContent="Preparing your stream";
+  $("playerState").textContent="LOADING";$("embedPlaceholder").hidden=true;
   $("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());
   const frame=document.createElement("iframe");frame.id="vidFrame";frame.title="JOKSTREAM video player";frame.src=buildEmbedUrl(item,type,season,episode);
   frame.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";frame.allowFullscreen=true;frame.referrerPolicy="strict-origin-when-cross-origin";
-  frame.setAttribute("sandbox","allow-scripts allow-same-origin allow-forms allow-presentation");
-  frame.addEventListener("load",()=>{$("embedPlaceholder").hidden=true;$("playerState").textContent="PLAYER READY";});
+  $("embedPlaceholder").hidden=true;
+  frame.addEventListener("load",()=>{$("playerState").textContent="PLAYER LOADED";});
   $("embedStage").append(frame);
   $("playerProgress").textContent="Progress is stored on this device when playback events are received.";
   $("playbackRate").textContent=state.currentRate+"×";
@@ -157,7 +172,7 @@ function sendPlayerCommand(action,value){
   frame.contentWindow.postMessage(message,VIDSRC);
 }
 window.addEventListener("message",event=>{
-  if(event.origin!==VIDSRC)return;
+  if(!event.origin.startsWith("https://")||!event.origin.includes("vidsrc.sh"))return;
   let payload=event.data;if(typeof payload==="string"){try{payload=JSON.parse(payload)}catch{return}}
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
@@ -197,37 +212,32 @@ function normalizeChannel(item){
   return {id:String(id??""),name:safe(item.name||item.title||"Unknown channel"),category:String(item.category_id??item.categoryId??""),categoryName:safe(item.category_name||item.categoryName||"Other"),logo:item.stream_icon||item.streamIcon||item.logo||"",country:item.country||""};
 }
 async function loadLive(){
-  if(state.liveChannels.length){renderChannels();return;}
-  $("liveStatus").textContent="Loading channel catalogue…";
-  try{
-    const first=await apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page:1,limit:100});
-    if(!first.ok)throw new Error(first.error||"Channel catalogue unavailable");
-    const all=[...(first.items||[])];let page=2;
-    while(first.total&&all.length<first.total&&page<=30){const next=await apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page,limit:100});all.push(...(next.items||[]));if(!next.has_more)break;page++;}
-    state.liveChannels=all.map(normalizeChannel).filter(x=>x.id);
-    state.liveCategories=first.categories||[];
-    $("liveCount").textContent=state.liveChannels.length.toLocaleString();
-    $("liveStatus").textContent=state.liveChannels.length?"Channel catalogue ready":"No channels published by the provider.";
-    renderCategories();renderChannels();
-  }catch(e){$("liveStatus").textContent="Channel service unavailable";$("channelList").innerHTML='<div class="empty-state">Could not load channels. '+escapeHtml(e.message)+'</div>';toast("Live TV connection failed.",true);}
+ if(state.liveChannels.length){renderChannels();return;}
+ $("liveStatus").textContent="Loading full channel catalogue…";
+ try{
+  const first=await apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page:1,limit:100});if(!first.ok)throw new Error(first.error||"Channel catalogue unavailable");
+  const all=[...(first.items||[])],pages=Math.ceil(Number(first.total||all.length)/100);
+  for(let start=2;start<=pages;start+=8){const nums=Array.from({length:Math.min(8,pages-start+1)},(_,i)=>start+i);const batch=await Promise.all(nums.map(page=>apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page,limit:100})));batch.forEach(x=>all.push(...(x.items||[])));}
+  state.liveChannels=all.map(normalizeChannel).filter(x=>x.id);state.liveCategories=first.categories||[];state.liveRendered=0;
+  $("liveCount").textContent=state.liveChannels.length.toLocaleString();$("liveStatus").textContent=state.liveChannels.length?"Full channel catalogue ready":"No channels published by provider.";renderCategories();renderChannels();
+ }catch(e){$("liveStatus").textContent="Channel service unavailable";$("channelList").innerHTML='<div class="empty-state">Could not load channels. '+escapeHtml(e.message)+'</div>';toast("Live TV connection failed.",true);}
 }
 function renderCategories(){
   const host=$("channelCategories");host.replaceChildren();
   const all=document.createElement("button");all.className="category-pill";all.dataset.category="";all.textContent="All channels";all.onclick=()=>{state.liveCategory="";renderCategories();renderChannels();};all.classList.toggle("active",!state.liveCategory);host.append(all);
   state.liveCategories.forEach(cat=>{const id=String(cat.category_id??cat.id??"");const b=document.createElement("button");b.className="category-pill";b.dataset.category=id;b.textContent=cat.category_name||cat.name||"Category";b.onclick=()=>{state.liveCategory=id;renderCategories();renderChannels();};b.classList.toggle("active",id===state.liveCategory);host.append(b);});
 }
+function appendChannelRows(rows){
+ const host=$("channelList"),start=state.liveRendered||0,chunk=rows.slice(start,start+200);
+ chunk.forEach(c=>{const b=document.createElement("button");b.className="channel-row";b.dataset.id=c.id;const logo=document.createElement("span");logo.className="channel-logo";
+ if(c.logo&&/^https?:\/\//i.test(c.logo)){const im=document.createElement("img");im.src=c.logo;im.alt="";im.loading="lazy";im.onerror=()=>{logo.textContent=c.name.slice(0,1);};logo.append(im);}else logo.textContent=c.name.slice(0,1).toUpperCase();
+ const info=document.createElement("span"),name=document.createElement("b"),meta=document.createElement("small");info.style.minWidth="0";name.className="channel-name";name.textContent=c.name;meta.className="channel-meta";meta.textContent=c.categoryName;info.append(name,meta);const play=document.createElement("span");play.className="channel-play";play.textContent="▶";b.append(logo,info,play);b.onclick=()=>playLive(c);host.append(b);});
+ state.liveRendered=start+chunk.length;
+ if(state.liveRendered<rows.length){const more=document.createElement("button");more.className="button button-glass load-more-channels";more.textContent="Load more channels · "+(rows.length-state.liveRendered).toLocaleString()+" remaining";more.onclick=()=>{more.remove();appendChannelRows(rows);};host.append(more);}
+}
 function renderChannels(){
-  const host=$("channelList"),q=state.liveSearch.toLowerCase();
-  const rows=state.liveChannels.filter(c=>(!state.liveCategory||c.category===state.liveCategory)&&(!q||(c.name+" "+c.categoryName+" "+c.country).toLowerCase().includes(q)));
-  $("channelResults").textContent=rows.length.toLocaleString()+" results";host.replaceChildren();
-  if(!rows.length){host.innerHTML='<div class="empty-state">No channels match your search.</div>';return;}
-  rows.slice(0,700).forEach(c=>{
-    const b=document.createElement("button");b.className="channel-row";b.dataset.id=c.id;
-    const logo=document.createElement("span");logo.className="channel-logo";
-    if(c.logo&&/^https?:\/\//i.test(c.logo)){const im=document.createElement("img");im.src=c.logo;im.alt="";im.loading="lazy";im.onerror=()=>{logo.textContent=c.name.slice(0,1);};logo.append(im);}else logo.textContent=c.name.slice(0,1).toUpperCase();
-    const info=document.createElement("span"),name=document.createElement("b"),meta=document.createElement("small");info.style.minWidth="0";name.className="channel-name";name.textContent=c.name;meta.className="channel-meta";meta.textContent=c.categoryName;info.append(name,meta);
-    const play=document.createElement("span");play.className="channel-play";play.textContent="▶";b.append(logo,info,play);b.onclick=()=>playLive(c);host.append(b);
-  });
+ const host=$("channelList"),q=state.liveSearch.toLowerCase(),rows=state.liveChannels.filter(c=>(!state.liveCategory||c.category===state.liveCategory)&&(!q||(c.name+" "+c.categoryName+" "+c.country).toLowerCase().includes(q)));
+ $("channelResults").textContent=rows.length.toLocaleString()+" results";host.replaceChildren();state.liveRendered=0;if(!rows.length){host.innerHTML='<div class="empty-state">No channels match your search.</div>';return;}appendChannelRows(rows);
 }
 function stopLive(){if(state.liveEngine){try{state.liveEngine.destroy();}catch{}state.liveEngine=null;}const video=$("liveVideo");video.pause();video.removeAttribute("src");video.load();}
 function playLive(channel){
