@@ -45,9 +45,9 @@ External subtitles are fetched through the JOKSTREAM API Worker and passed to Vi
 
 ## Deployment
 
-The repository is a static site. Publish the repository root with your configured static host (the original project was prepared for Netlify). The publish directory must contain `index.html`, `app.js`, `style.css`, `manifest.json` and the `icons/` directory.
+The repository is a static site. A Cloudflare Worker named `jokstream-site` serves the current `main` branch from GitHub at `https://jokstream-site.abdonarjah.workers.dev/`, with short edge caching. The Worker was deployed through the Cloudflare API. The original repository can also be published through a connected static host such as Netlify.
 
-If the Git repository is connected to Netlify, commits to `main` can trigger its configured build/deploy pipeline. Otherwise, upload the root directory to your static host.
+The Worker reads the public GitHub raw files at request time, so updates committed to `main` become visible after the edge cache expires. For a larger production deployment, consider moving the files to Cloudflare Workers Static Assets.
 
 ## Release checks
 
