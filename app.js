@@ -180,7 +180,7 @@ function playVOD(item,type="movie",season=null,episode=null){
   closeModal("detailsModal");$("playerModal").classList.add("open");$("playerModal").setAttribute("aria-hidden","false");
   $("playerTitle").textContent=titleOf(item)+(type==="tv"&&season?" · S"+season+" E"+episode:"");
   $("playerState").textContent="LOADING";$("embedPlaceholder").hidden=true;
-  $("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());
+  $("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());
   const frame=document.createElement("iframe");frame.id="vidFrame";frame.title="JOKSTREAM video player";frame.src=buildEmbedUrl(item,type,season,episode);
   frame.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";frame.allowFullscreen=true;frame.referrerPolicy="strict-origin-when-cross-origin";frame.loading="eager";
   frame.addEventListener("load",()=>{$("playerState").textContent="TAP PLAY INSIDE PLAYER";});
@@ -310,7 +310,7 @@ function setupPopupProtection(){
 function setupEvents(){
   document.addEventListener("click",event=>{
     const route=event.target.closest("[data-route]")?.dataset.route;if(route){event.preventDefault();showView(route);}
-    const close=event.target.closest("[data-close]")?.dataset.close;if(close){closeModal(close==="details"?"detailsModal":close==="player"?"playerModal":"subtitleModal");if(close==="player"){$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}}
+    const close=event.target.closest("[data-close]")?.dataset.close;if(close){closeModal(close==="details"?"detailsModal":close==="player"?"playerModal":"subtitleModal");if(close==="player"){$("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());}}
   });
   $("loadMoreTitles").onclick=()=>{state.browsePage++;loadBrowse(false);};
   $("sortSelect").onchange=()=>{state.browsePage=1;loadBrowse(true);};
@@ -322,7 +322,7 @@ function setupEvents(){
   document.querySelectorAll("[data-command]").forEach(b=>b.onclick=()=>{const a=b.dataset.command;sendPlayerCommand(a);if(a==="rate+"||a==="rate-"){state.currentRate=Math.max(.25,Math.min(4,state.currentRate+(a==="rate+"?.25:-.25)));$("playbackRate").textContent=state.currentRate.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")+"×";}});
   $("openSubtitles").onclick=openSubtitles;$("subtitleSearchButton").onclick=searchSubtitles;
   $("detailsModal").addEventListener("click",e=>{if(e.target.id==="detailsModal")closeModal("detailsModal");});
-  $("playerModal").addEventListener("click",e=>{if(e.target.id==="playerModal"){closeModal("playerModal");$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}});
+  $("playerModal").addEventListener("click",e=>{if(e.target.id==="playerModal"){closeModal("playerModal");$("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());}});
   document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal("detailsModal");closeModal("subtitleModal");if($("playerModal").classList.contains("open")){closeModal("playerModal");$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}}});
   $("seasonSelect").onchange=()=>loadEpisodes(state.current.id,Number($("seasonSelect").value));
 }
