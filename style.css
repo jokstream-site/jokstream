@@ -13,3 +13,29 @@
 @media(max-width:1050px){.topbar{gap:18px}.desktop-nav{gap:0}.nav-link{padding:9px}.live-layout{grid-template-columns:minmax(0,1.35fr) minmax(275px,.8fr)}}
 @media(max-width:760px){.topbar{height:62px;padding:0 15px;justify-content:space-between}.desktop-nav{display:none}.brand{font-size:16px}.global-search{width:min(45vw,220px);height:36px}.top-actions{gap:6px}.icon-button,.avatar-button{height:36px;min-width:36px}.hero{height:470px;margin:9px 9px 0;border-radius:17px}.hero-shade{background:linear-gradient(90deg,#080b12e8,#080b1270 90%),linear-gradient(0deg,#080b12,transparent 75%)}.hero-content{left:22px;right:20px;bottom:54px}.hero h1{font-size:48px}.hero-content>p{font-size:13px}.hero-index{right:18px;bottom:18px}.quick-entry{grid-template-columns:1fr;gap:8px;margin:13px 10px 34px}.quick-card{padding:12px}.content-rows,.page-view{padding-left:13px;padding-right:13px}.shelf{margin-bottom:30px}.section-heading h2{font-size:19px}.poster-row{grid-auto-columns:135px;gap:10px}.page-view{padding-top:30px}.page-heading{align-items:flex-start;flex-direction:column;margin-bottom:20px}.page-heading h1{font-size:36px}.filter-bar{align-items:flex-start;flex-direction:column}.poster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.poster-grid .poster-card{max-width:none}.poster-info{padding:8px}.poster-title{font-size:10px}.poster-sub{font-size:9px}.live-layout{grid-template-columns:1fr}.channel-browser{max-height:560px}.live-stage-top{padding:13px}.live-count{margin-top:-7px}.details-panel{max-height:calc(100dvh - 12px);margin:0 auto;width:100%;border-radius:14px}.details-backdrop{height:330px}.details-topline{left:20px;right:20px;top:20px}.details-copy{margin-top:120px}.details-copy h2{font-size:34px}.details-body{padding:0 20px 25px}.details-columns{grid-template-columns:1fr;gap:5px}.details-columns>section:has(#seasonsPanel){} .player-panel{width:100%;margin:0 auto;border-radius:12px}.modal{padding:6px}.player-header{padding:12px}.remote-controls{gap:6px}.remote-btn{min-width:35px;height:35px}.player-footer-note{flex-direction:column;gap:5px}.site-footer{padding:20px 14px 85px;flex-wrap:wrap;gap:12px}.site-footer>span:nth-child(2){display:none}.mobile-nav{display:flex;position:fixed;z-index:40;left:0;right:0;bottom:0;padding:8px 5px calc(8px + env(safe-area-inset-bottom));background:#0b121ceF;border-top:1px solid var(--line);backdrop-filter:blur(20px);justify-content:space-around}.mobile-nav button{border:0;background:transparent;color:#8794a3;font-size:9px;display:grid;justify-items:center;gap:3px;min-width:50px}.mobile-nav button span{font-size:19px}.mobile-nav button.active{color:#8fe0d4}.subtitle-panel{margin:4vh auto;padding:22px}.subtitle-search-row{flex-direction:column}}
 @media(max-width:390px){.global-search{width:40vw}.poster-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero h1{font-size:42px}.remote-hint{display:none}}
+
+/* Responsive details and player layout */
+html,body{max-width:100%;overflow-x:hidden}
+.details-panel{width:min(1100px,calc(100vw - 24px));box-sizing:border-box}
+.details-topline{position:relative;top:auto;left:auto;right:auto;padding:28px 36px 0;margin-top:-235px}
+.details-copy{margin-top:0;max-width:760px}.details-copy>p{margin:16px 0 20px}
+.details-actions{position:relative;z-index:4;align-items:center;margin:18px 0 20px}.details-body{padding-top:8px}
+.embed-stage{min-height:180px}.embed-stage iframe{position:absolute;inset:0;width:100%;height:100%;z-index:2}
+@media(max-width:760px){
+ .details-panel{width:calc(100vw - 16px);max-height:calc(100dvh - 12px);margin:6px auto;border-radius:16px}
+ .details-backdrop{height:300px}.details-gradient{height:350px}
+ .details-topline{padding:18px 18px 0;margin-top:-160px}
+ .details-copy h2{font-size:clamp(30px,9vw,42px);line-height:1.08}
+ .details-copy>p{font-size:13px;line-height:1.55;margin:12px 0 16px}
+ .details-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 18px}
+ .details-actions .button{width:100%;min-width:0;padding:11px 8px;font-size:12px;white-space:normal}
+ .details-actions #detailsPlay{grid-column:1/-1}
+ .details-body{padding:0 18px 24px}.details-columns{grid-template-columns:minmax(0,1fr);gap:8px}
+ .facts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .player-panel{width:calc(100vw - 12px);margin:6px auto;border-radius:14px}
+ .player-header{gap:8px;align-items:flex-start}.player-header h2{font-size:14px;overflow-wrap:anywhere}
+ .player-header-actions{gap:7px}.embed-stage{aspect-ratio:16/9;min-height:0}
+ .remote-panel{padding:12px}.remote-controls{gap:6px}.remote-btn{min-width:38px;height:38px}
+ .player-footer-note{padding:0 12px 12px}
+}
+@media(max-width:390px){.details-actions{grid-template-columns:1fr}.details-actions #detailsPlay{grid-column:auto}.details-body{padding-left:14px;padding-right:14px}}
