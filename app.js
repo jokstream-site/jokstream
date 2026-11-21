@@ -199,7 +199,7 @@ function playVOD(item,type="movie",season=null,episode=null){
   frame.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";frame.allowFullscreen=true;frame.referrerPolicy="strict-origin-when-cross-origin";frame.loading="eager";
   frame.addEventListener("load",()=>{$("playerState").textContent="TAP PLAY INSIDE PLAYER";});
   frame.addEventListener("error",()=>{$("playerState").textContent="PLAYER FAILED TO LOAD";});
-  $("embedStage").append(frame);setPlayerShield(true);
+  $("embedStage").append(frame);
   $("playerProgress").textContent="Progress is stored on this device when playback events are received.";
   $("playbackRate").textContent=state.currentRate+"×";
 }
@@ -217,7 +217,7 @@ function setPlayerShield(enabled){
 function sendPlayerCommand(action,value){
   const frame=$("embedStage").querySelector("iframe");if(!frame?.contentWindow){toast("The player is not ready yet.",true);return;}
   const message={player:true,action};if(value!==undefined)message.value=value;
-  frame.contentWindow.postMessage(message,"https://vidsrc.su");
+  frame.contentWindow.postMessage(message,"*");
 }
 window.addEventListener("message",event=>{
   let eventHost="";try{eventHost=new URL(event.origin).hostname.toLowerCase()}catch{return}if(!["vidsrc.su"].includes(eventHost))return;
@@ -225,6 +225,7 @@ window.addEventListener("message",event=>{
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
   if(status){$("playerState").textContent=status.toUpperCase();}
+  if(status==="playing")setPlayerShield(true);
   const progress=Number(data.player_progress),duration=Number(data.player_duration);
   if(Number.isFinite(progress)&&progress>=0&&state.current){const p={time:Math.floor(progress),duration:Number.isFinite(duration)?Math.floor(duration):0,updatedAt:Date.now()};const key=progressKey(state.currentType,state.current.id,info.season||state.currentEpisode?.season,info.episode||state.currentEpisode?.episode);localStorage.setItem(key,JSON.stringify(p));$("playerProgress").textContent="Resume point saved · "+formatTime(progress)+(duration>0?" / "+formatTime(duration):"");}
   if(status==="completed"&&state.currentType==="tv"&&state.currentEpisode)toast("Episode completed. Choose the next episode when you're ready.");
