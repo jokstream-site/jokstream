@@ -1,855 +1,292 @@
-/* JokStream app logic. Use only channels you are authorized to access or redistribute. */
-const CHANNELS_PER_PAGE = 30;
-// The owner Worker serves the directory and proxies sources authorized for use.
-const CHANNEL_DIRECTORY_URL = "https://jokstream-api.abdonarjah.workers.dev/";
-const SHARE_GATE_INTERVAL_MS = 45 * 60 * 1000;
-
-// Supabase Realtime chat. The publishable key is designed for browser use; RLS protects table access.
-const SUPABASE_URL = "https://qdzaihlvoidqghjpfxdk.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_biqieT8ICxX0k433lhBU-A_mHdW_6GK";
-const CHAT_CONFIG = { maxMessages: 50, maxMessageLength: 300, maxNicknameLength: 24, minSendIntervalMs: 900 };
-let supabaseClient = null;
-let supabaseChatChannel = null;
-let chatRoomKey = null;
-let currentChannel = null;
-let lastChatSend = 0;
-let pendingGateChannel = null;
-let gateWindowOpened = false;
-let gateReturnHandler = null;
-
-let allChannels = [];
-let filteredChannels = [];
-let visibleCount = CHANNELS_PER_PAGE;
-let hlsInstance = null;
-let p2pEngineClass = null;
-let shareUnlockedThisSession = false;
-let watchStartedAt = 0;
-let breakGatePending = false;
-let deferredInstallPrompt = null;
-let overlayPlaceholders = null;
-let presenceViewerId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-let presenceRoomKey = null;
-const POPUNDER_INTERVAL_MS = 30 * 60 * 1000;
-const POPUNDER_STORAGE_KEY = "jokstream_popunder_last_shown_v1";
-
+/* JOKSTREAM — unified live TV, movies and series experience. */
+const JOKFLIX_API = "https://jokflix.abdonarjah.workers.dev";
+const JOKSTREAM_API = "https://jokstream-api.abdonarjah.workers.dev";
+const TMDB_IMAGE = "https://image.tmdb.org/t/p/";
+const VIDSRC = "https://vidsrc.sh";
 const $ = (id) => document.getElementById(id);
-
-function toast(message, isError = false) {
-  const region = $("socialToastRegion");
-  if (!region) return;
-  const node = document.createElement("div");
-  node.className = `toast${isError ? " error" : ""}`;
-  node.textContent = message;
-  region.appendChild(node);
-  window.setTimeout(() => node.remove(), 3200);
+const state = {
+  route: "home", browseType: "movie", browsePage: 1, browseSort: "popularity.desc",
+  genre: "", current: null, currentType: "movie", currentEpisode: null, currentDetails: null,
+  liveChannels: [], liveCategories: [], liveCategory: "", liveSearch: "", liveEngine: null,
+  subtitleContext: null, selectedSubtitle: null, progress: {}, myList: readStore("jokstream_mylist", []),
+  lastResults: [], searchQuery: "", currentRate: 1
+};
+function readStore(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; } }
+function writeStore(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+function toast(message, error = false) { const el=document.createElement("div");el.className="toast"+(error?" error":"");el.textContent=message;$("toastRegion").append(el);setTimeout(()=>el.remove(),3200); }
+function safe(value) { return String(value ?? "").replace(/[<>]/g,"").trim(); }
+function titleOf(item) { return item?.title || item?.name || "Untitled"; }
+function yearOf(item) { return String(item?.release_date || item?.first_air_date || "").slice(0,4); }
+function image(path,size="w500") { return path ? TMDB_IMAGE+size+path : ""; }
+function mediaType(item, fallback="movie") { return item?.media_type === "tv" || item?.first_air_date || fallback === "tv" ? "tv" : "movie"; }
+async function tmdb(path, params={}) {
+  const url = new URL(JOKFLIX_API + "/api/" + path.replace(/^\/+/, ""));
+  for (const [key,value] of Object.entries({language:"en-US",include_adult:"false",...params})) if(value!==undefined&&value!==null&&value!=="") url.searchParams.set(key,String(value));
+  const response = await fetch(url, {headers:{Accept:"application/json"}});
+  if (!response.ok) { let detail=""; try { const body=await response.json();detail=body.status_message||body.error||""; } catch {} throw new Error(detail || "TMDB request failed ("+response.status+")"); }
+  return response.json();
 }
-
-function safeText(value, max = 200) {
-  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+async function apiJson(url, params={}) {
+  const target = new URL(url);
+  Object.entries(params).forEach(([k,v])=>{if(v!==undefined&&v!==null&&v!=="")target.searchParams.set(k,String(v));});
+  const response = await fetch(target);
+  if(!response.ok){let message="Request failed ("+response.status+")";try{message=(await response.json()).error||message}catch{}throw new Error(message);}
+  return response.json();
 }
-
-function slugify(value) {
-  return safeText(value, 160).normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "unknown-channel";
+function card(item,type="movie") {
+  const el=document.createElement("article");el.className="poster-card";el.tabIndex=0;
+  const poster=document.createElement("img");poster.className="poster-image";poster.loading="lazy";poster.alt=titleOf(item);poster.src=image(item.poster_path,"w342");poster.onerror=()=>{poster.style.opacity=".15";};
+  const info=document.createElement("div");info.className="poster-info";
+  const name=document.createElement("div");name.className="poster-title";name.textContent=titleOf(item);
+  const sub=document.createElement("div");sub.className="poster-sub";
+  const year=document.createElement("span");year.textContent=yearOf(item)||"Explore";
+  const rating=document.createElement("span");rating.className="poster-rating";rating.textContent="★ "+Number(item.vote_average||0).toFixed(1);
+  sub.append(year,rating);info.append(name,sub);el.append(poster,info);
+  const open=()=>showDetails(item,type);el.addEventListener("click",open);el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}});
+  return el;
 }
-
-function parseM3U(text) {
-  const lines = String(text ?? "").replace(/^\uFEFF/, "").split(/\r?\n/);
-  const channels = [];
-  let current = null;
-  const findMetadataSeparator = (line) => {
-    let quote = "";
-    for (let index = line.indexOf(":") + 1; index < line.length; index += 1) {
-      const character = line[index];
-      if (character === "\\" && quote) {
-        index += 1;
-      } else if (quote) {
-        if (character === quote) quote = "";
-      } else if (character === '"' || character === "'") {
-        quote = character;
-      } else if (character === ",") {
-        return index;
-      }
-    }
-    return -1;
-  };
-
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/^\uFEFF/, "").trim();
-    if (!line) continue;
-    if (/^#EXTINF:/i.test(line)) {
-      const commaIndex = findMetadataSeparator(line);
-      const metadata = commaIndex >= 0 ? line.slice(0, commaIndex) : line;
-      const attributes = Object.fromEntries(
-        [...metadata.matchAll(/([^\s=]+)=("(?:[^"\\]|\\.)*"|'[^']*'|[^\s,]*)/g)]
-          .map((match) => [match[1].toLowerCase(), match[2].replace(/^(?:"|')|(?:"|')$/g, "")])
-      );
-      const name = commaIndex >= 0
-        ? line.slice(commaIndex + 1).trim()
-        : attributes["tvg-name"] || "Unknown channel";
-      const attr = (key) => {
-        return attributes[key.toLowerCase()] || "";
-      };
-      current = {
-        name: safeText(name, 140) || "Unknown channel",
-        logo: attr("tvg-logo"),
-        group: safeText(attr("group-title") || "Other", 80),
-        country: safeText(attr("tvg-country"), 80),
-        url: ""
-      };
-    } else if (!line.startsWith("#") && current) {
-      current.url = line;
-      // Preserve both HTTPS and HTTP stream URLs; no scheme-based channel filtering.
-      if (/^https?:\/\//i.test(current.url)) {
-        const metadata = `${current.name} ${current.group}`;
-        current.shareGate = /\b(premium|exclusive|encrypted|vip|members[ -]?only)\b/i.test(metadata);
-        current.chatRoom = slugify(`${current.name}-${current.group}-${current.country}`);
-        channels.push(current);
-      }
-      current = null;
-    }
-  }
-
-  const seen = new Set();
-  return channels.filter((channel) => {
-    const key = `${channel.name}|${channel.url}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function decodePlaylistPayload(raw) {
-  const text = String(raw ?? "").replace(/^\uFEFF/, "").trim();
-  if (!text || /^#EXTM3U\b/i.test(text) || /^#EXTINF:/i.test(text)) return text;
-
-  const compact = text.replace(/\s+/g, "");
-  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(compact) || compact.length % 4 === 1) return text;
-  try {
-    const base64 = compact.replace(/-/g, "+").replace(/_/g, "/");
-    const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-      .replace(/^\uFEFF/, "").trim();
-    return /^#(?:EXTM3U|EXTINF:)/i.test(decoded) ? decoded : text;
-  } catch (_) {
-    return text;
-  }
-}
-
-function normalizeChannel(channel) {
-  if (!channel || typeof channel !== "object" || Array.isArray(channel)) {
-    throw new Error("The channel directory contains an invalid channel.");
-  }
-  const name = safeText(channel.name, 140) || "Unknown channel";
-  const group = safeText(channel.group || "Other", 80);
-  const country = safeText(channel.country, 80);
-  const url = typeof channel.url === "string" ? channel.url.trim() : "";
-  let source;
-  try {
-    source = new URL(url);
-  } catch (_) {
-    throw new Error(`The channel directory contains an invalid URL for "${name}".`);
-  }
-  if (source.protocol !== "http:" && source.protocol !== "https:") {
-    throw new Error(`The channel directory contains an unsupported URL for "${name}".`);
-  }
-  const hasShareGate = Object.prototype.hasOwnProperty.call(channel, "shareGate");
-  return {
-    name,
-    group,
-    logo: typeof channel.logo === "string" ? channel.logo : "",
-    country,
-    url: source.href,
-    chatRoom: safeText(channel.chatRoom, 160) || slugify(`${name}-${group}-${country}`),
-    shareGate: hasShareGate
-      ? channel.shareGate === true || channel.shareGate === "true"
-      : /\b(premium|exclusive|encrypted|vip|members[ -]?only)\b/i.test(`${name} ${group}`)
-  };
-}
-
-async function loadChannels() {
-  const list = $("channelList");
-  allChannels = [];
-  filteredChannels = [];
-  visibleCount = CHANNELS_PER_PAGE;
-  $("channelCount").textContent = "0";
-  $("resultsCount").textContent = "Loading channels…";
-  list.innerHTML = '<div class="empty-state">Loading the public channel directory…</div>';
-  $("playerStatus").textContent = "Loading channel directory";
-  try {
-    const response = await fetch(CHANNEL_DIRECTORY_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Playlist request failed (${response.status})`);
-    // Decode the Worker payload as UTF-8 so Arabic and other channel names remain intact.
-    const payload = decodePlaylistPayload(await response.text());
-    allChannels = parseM3U(payload).map(normalizeChannel);
-    allChannels.sort((a, b) => a.name.localeCompare(b.name));
-    $("channelCount").textContent = allChannels.length.toLocaleString();
-    populateCategories();
-    applyChannelFilters();
-    if (allChannels.length) {
-      $("playerStatus").textContent = "Channel directory ready";
-    } else {
-      $("resultsCount").textContent = "0 results";
-      $("playerStatus").textContent = "Channel directory is empty";
-      list.innerHTML = '<div class="empty-state">No channels are currently published by the Worker.</div>';
-    }
-  } catch (error) {
-    console.error("Could not load IPTV playlist:", error);
-    allChannels = [];
-    filteredChannels = [];
-    $("channelCount").textContent = "0";
-    list.innerHTML = '<div class="empty-state">Could not load the channel directory. Check your connection and try refreshing the page.</div>';
-    $("resultsCount").textContent = "Unavailable";
-    $("playerStatus").textContent = "Directory could not be loaded";
-  }
-}
-
-
-function renderQuickCategoryFilters() {
-  const host = $("categoryQuickFilters");
-  if (!host) return;
-  const groups = [...new Set(allChannels.map((channel) => channel.group).filter(Boolean))];
-  const preferred = [
-    ["Sports", /sport|football|soccer|basket|nba|tennis|motorsport|cricket/i],
-    ["News", /news|noticias|actualit|inform|world news/i],
-    ["Entertainment", /entertain|movie|film|series|music|comedy|drama/i],
-    ["Kids", /kids|children|cartoon|animation/i],
-    ["Documentary", /documentary|document|history|science|nature/i]
+function fillRow(id,items,type) { const host=$(id);host.replaceChildren();const rows=(items||[]).filter(x=>x.poster_path).slice(0,18);if(!rows.length){host.innerHTML='<p class="muted">No titles available right now.</p>';return;}rows.forEach(x=>host.append(card(x,type))); }
+async function home() {
+  const jobs=[
+    ["trending/movie/week","trendingMovies","movie"],
+    ["tv/popular","popularSeries","tv"],
+    ["movie/top_rated","topMovies","movie"],
+    ["trending/tv/week","trendingSeries","tv"]
   ];
-  const buttons = [{ label: "All", value: "" }];
-  for (const [label, pattern] of preferred) {
-    if (groups.some((group) => pattern.test(group))) buttons.push({ label, value: `__smart:${label}` });
-  }
-  host.replaceChildren();
-  for (const item of buttons) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "category-chip";
-    button.textContent = item.label;
-    button.dataset.category = item.value;
-    button.setAttribute("aria-pressed", item.value === "" ? "true" : "false");
-    button.addEventListener("click", () => {
-      host.querySelectorAll(".category-chip").forEach((chip) => {
-        chip.setAttribute("aria-pressed", String(chip === button));
-      });
-      $("categoryFilter").value = item.value.startsWith("__smart:") ? "" : item.value;
-      $("categoryFilter").dataset.smartCategory = item.value.startsWith("__smart:") ? item.value.slice(8) : "";
-      applyChannelFilters();
-    });
-    host.appendChild(button);
-  }
-}
-
-function populateCategories() {
-  const select = $("categoryFilter");
-  const categories = [...new Set(allChannels.map((channel) => channel.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  select.innerHTML = '<option value="">All categories</option>';
-  for (const category of categories) {
-    const option = document.createElement("option");
-    option.value = category;
-    option.textContent = category;
-    select.appendChild(option);
-  }
-  renderQuickCategoryFilters();
-}
-
-function applyChannelFilters() {
-  const query = safeText($("channelSearch").value, 120).toLowerCase();
-  const category = $("categoryFilter").value;
-  const smartCategory = $("categoryFilter").dataset.smartCategory || "";
-  const smartPatterns = {
-    Sports: /sport|football|soccer|basket|nba|tennis|motorsport|cricket/i,
-    News: /news|noticias|actualit|inform|world news/i,
-    Entertainment: /entertain|movie|film|series|music|comedy|drama/i,
-    Kids: /kids|children|cartoon|animation/i,
-    Documentary: /documentary|document|history|science|nature/i
-  };
-  const pattern = smartPatterns[smartCategory];
-  filteredChannels = allChannels.filter((channel) => {
-    const matchesQuery = !query || `${channel.name} ${channel.country} ${channel.group}`.toLowerCase().includes(query);
-    const matchesCategory = pattern ? pattern.test(`${channel.name} ${channel.group}`) : (!category || channel.group === category);
-    return matchesQuery && matchesCategory;
-  });
-  visibleCount = CHANNELS_PER_PAGE;
-  renderChannels();
-}
-
-function renderChannels() {
-  const list = $("channelList");
-  const channels = filteredChannels.slice(0, visibleCount);
-  list.replaceChildren();
-  if (!channels.length) {
-    list.innerHTML = '<div class="empty-state">No channels match your search.</div>';
-  } else {
-    const fragment = document.createDocumentFragment();
-    for (const channel of channels) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "channel-item";
-      button.setAttribute("aria-label", `Play ${channel.name}`);
-      const logo = document.createElement("span");
-      logo.className = "channel-logo";
-      if (channel.logo && /^https?:\/\//i.test(channel.logo)) {
-        const img = document.createElement("img");
-        img.src = channel.logo;
-        img.alt = "";
-        img.loading = "lazy";
-        img.referrerPolicy = "no-referrer";
-        img.onerror = () => { logo.textContent = channel.name.slice(0, 1).toUpperCase(); };
-        logo.appendChild(img);
-      } else logo.textContent = channel.name.slice(0, 1).toUpperCase();
-      const info = document.createElement("span");
-      info.className = "channel-info";
-      const name = document.createElement("span");
-      name.className = "channel-name";
-      name.textContent = channel.name;
-      const meta = document.createElement("span");
-      meta.className = "channel-meta";
-      meta.textContent = [channel.group, channel.country].filter(Boolean).join(" · ");
-      info.append(name, meta);
-      const play = document.createElement("span");
-      play.className = "play-symbol";
-      play.textContent = "▶";
-      button.append(logo, info, play);
-      button.addEventListener("click", () => requestPlayChannel(channel, button));
-      fragment.appendChild(button);
-    }
-    list.appendChild(fragment);
-  }
-  $("resultsCount").textContent = `${filteredChannels.length.toLocaleString()} results`;
-  $("loadMoreButton").hidden = visibleCount >= filteredChannels.length;
-}
-
-function stopCurrentHls() {
-  if (hlsInstance) {
-    try { hlsInstance.destroy(); } catch (_) {}
-    hlsInstance = null;
-  }
-}
-
-function resolveStreamUrl(channel) {
+  await Promise.all(jobs.map(async([path,id,type])=>{try{const d=await tmdb(path);fillRow(id,d.results,type);}catch(e){$(id).innerHTML='<p class="muted">Unable to load this collection.</p>';console.warn(path,e);}}));
   try {
-    const source = new URL(channel.url);
-    if (source.protocol !== "http:" && source.protocol !== "https:") return "";
-    const proxy = new URL(CHANNEL_DIRECTORY_URL);
-    if (source.origin === proxy.origin && source.searchParams.has("proxy_url")) {
-      return source.href;
-    }
-    proxy.searchParams.delete("get_list");
-    proxy.searchParams.set("proxy_url", source.href);
-    return proxy.href;
-  } catch (_) {
-    return "";
-  }
+    const d=await tmdb("trending/movie/week");const hero=(d.results||[]).find(x=>x.backdrop_path)||d.results?.[0];
+    if(hero){$("heroBackdrop").style.backgroundImage="url('"+image(hero.backdrop_path,"original")+"')";$("heroTitle").innerHTML=escapeHtml(titleOf(hero)).replace(/\s+/g,"<br>");$("heroOverview").textContent=hero.overview||"Discover your next favourite story."; $("heroMeta").replaceChildren();[$("heroMeta")].forEach(()=>{});const bits=[yearOf(hero),Number(hero.vote_average||0).toFixed(1)+" ★",hero.original_language?.toUpperCase()].filter(Boolean);bits.forEach(v=>{const s=document.createElement("span");s.textContent=v;$("heroMeta").append(s);});$("heroPlay").onclick=()=>showDetails(hero,"movie");$("heroInfo").onclick=()=>showDetails(hero,"movie");}
+  } catch(e){console.warn("Hero unavailable",e);}
 }
-
-function requestPlayChannel(channel, selectedButton) {
-  if (!shareUnlockedThisSession || channel.shareGate) {
-    pendingGateChannel = { channel, selectedButton };
-    openShareGate();
-    return;
-  }
-  playChannel(channel, selectedButton);
+function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function showView(route) {
+  state.route=route;
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  const target=route==="live"?"liveView":route==="movies"||route==="series"?"browseView":route==="mylist"?"mylistView":route==="search"?"searchView":"homeView";
+  $(target).classList.add("active");
+  document.querySelectorAll("[data-route]").forEach(b=>b.classList.toggle("active",b.dataset.route===route));
+  if(route==="movies"||route==="series"){state.browseType=route==="series"?"tv":"movie";state.browsePage=1;state.genre="";$("browseTitle").textContent=route==="series"?"Series":"Movies";$("browseEyebrow").textContent=route==="series"?"SERIES COLLECTION":"EXPLORE THE LIBRARY";$("browseDescription").textContent=route==="series"?"Discover acclaimed shows and new seasons.":"Explore films from every genre and era.";buildGenres();loadBrowse(true);}
+  if(route==="live")loadLive();
+  if(route==="mylist")renderMyList();
 }
-
-function openShareGate() {
-  gateWindowOpened = false;
-  const isBreakGate = breakGatePending;
-  $("shareGateTitle").textContent = isBreakGate ? "Quick break — share JokStream" : "Share JokStream to continue";
-  $("shareGateStatus").textContent = "Open WhatsApp, then return here. The site cannot verify whether a message was sent.";
-  $("shareGateModal").hidden = false;
-  document.body.style.overflow = "hidden";
+function buildGenres(){
+  const host=$("genreFilters");host.replaceChildren();
+  const type=state.browseType;const path=type==="tv"?"genre/tv/list":"genre/movie/list";
+  const staticGenres=type==="tv"?[[10759,"Action & Adventure"],[35,"Comedy"],[18,"Drama"],[10765,"Sci-Fi & Fantasy"],[80,"Crime"],[9648,"Mystery"],[10768,"War & Politics"]]:[[28,"Action"],[12,"Adventure"],[16,"Animation"],[35,"Comedy"],[80,"Crime"],[18,"Drama"],[14,"Fantasy"],[27,"Horror"],[878,"Sci-Fi"],[53,"Thriller"]];
+  const all=document.createElement("button");all.className="genre-pill active";all.textContent="All";all.onclick=()=>{state.genre="";host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===all));state.browsePage=1;loadBrowse(true);};host.append(all);
+  staticGenres.forEach(([id,label])=>{const b=document.createElement("button");b.className="genre-pill";b.textContent=label;b.onclick=()=>{state.genre=String(id);host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));state.browsePage=1;loadBrowse(true);};host.append(b);});
 }
-
-function unlockShareGate() {
-  if (!pendingGateChannel) return;
-  const pending = pendingGateChannel;
-  pendingGateChannel = null;
-  shareUnlockedThisSession = true;
-  breakGatePending = false;
-  $("shareGateModal").hidden = true;
-  document.body.style.overflow = "";
-  if (gateReturnHandler) {
-    window.removeEventListener("focus", gateReturnHandler);
-    document.removeEventListener("visibilitychange", gateReturnHandler);
-    gateReturnHandler = null;
-  }
-  requestAnimationFrame(() => playChannel(pending.channel, pending.selectedButton));
+async function loadBrowse(reset=false){
+  if(reset){$("browseGrid").replaceChildren();state.browsePage=1;}
+  const type=state.browseType,sort=$("sortSelect").value||"popularity.desc";state.browseSort=sort;
+  const params={page:state.browsePage,sort_by:sort};
+  if(state.genre)params.with_genres=state.genre;
+  try{const d=await tmdb("discover/"+type,params);(d.results||[]).filter(x=>x.poster_path).forEach(x=>$("browseGrid").append(card(x,type)));$("browseCount").textContent=(d.total_results||0).toLocaleString()+" titles";$("loadMoreTitles").hidden=!d.total_pages||state.browsePage>=d.total_pages;}
+  catch(e){toast(e.message,true);$("browseGrid").innerHTML='<div class="empty-state">The catalogue could not be loaded. Please try again.</div>';}
 }
-
-function setupShareGate() {
-  $("shareGateButton").addEventListener("click", () => {
-    if (!pendingGateChannel) return;
-    const button = $("shareGateButton");
-    if (gateWindowOpened && button.dataset.returned === "true") {
-      unlockShareGate();
-      button.dataset.returned = "false";
-      button.textContent = "Open WhatsApp to share";
-      return;
-    }
-    gateWindowOpened = true;
-    const message = `Discover JokStream — live TV and entertainment in one place: ${getSiteUrl()}`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    $("shareGateStatus").textContent = "If WhatsApp opened, return to this tab. A website cannot confirm message delivery.";
-    gateReturnHandler = () => {
-      if (!gateWindowOpened || document.visibilityState === "hidden") return;
-      window.setTimeout(() => {
-        if (pendingGateChannel) {
-          button.textContent = "I returned — continue";
-          button.dataset.returned = "true";
-        }
-      }, 350);
-    };
-    window.addEventListener("focus", gateReturnHandler);
-    document.addEventListener("visibilitychange", gateReturnHandler);
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-    window.setTimeout(() => {
-      if (pendingGateChannel) {
-        button.textContent = "I returned — continue";
-        button.dataset.returned = "true";
-      }
-    }, 1300);
+async function showDetails(item,type="movie"){
+  state.current=item;state.currentType=type==="tv"||type==="series"?"tv":"movie";state.currentEpisode=null;
+  $("detailsModal").classList.add("open");$("detailsModal").setAttribute("aria-hidden","false");
+  $("detailsTitle").textContent=titleOf(item);$("detailsOverview").textContent=item.overview||"Loading title details…";
+  $("detailsBackdrop").style.backgroundImage=item.backdrop_path?"url('"+image(item.backdrop_path,"w1280")+"')":"none";
+  $("detailsType").textContent=state.currentType==="tv"?"SERIES DETAILS":"MOVIE DETAILS";
+  $("detailsMeta").textContent=[yearOf(item),item.vote_average?"★ "+Number(item.vote_average).toFixed(1):"",item.original_language?.toUpperCase()].filter(Boolean).join(" · ");
+  $("detailsFacts").replaceChildren();$("detailsCast").textContent="Loading cast…";$("similarRow").replaceChildren();$("seasonsPanel").hidden=true;$("detailsTrailer").hidden=true;
+  const path=state.currentType+"/"+item.id;
+  try{
+    const d=await tmdb(path,{append_to_response:"credits,videos,similar,external_ids"});
+    state.currentDetails=d;$("detailsTitle").textContent=titleOf(d);$("detailsOverview").textContent=d.overview||"No synopsis is available.";
+    $("detailsTagline").textContent=d.tagline||"";
+    const facts=[["RELEASE",yearOf(d)||"—"],["RATING",d.vote_average?Number(d.vote_average).toFixed(1)+" / 10":"—"],["STATUS",d.status||"—"],["LANGUAGE",d.original_language?.toUpperCase()||"—"]];
+    if(state.currentType==="movie"&&d.runtime)facts.push(["RUNTIME",d.runtime+" min"]);
+    if(state.currentType==="tv"&&d.number_of_seasons)facts.push(["SEASONS",d.number_of_seasons]);
+    $("detailsFacts").replaceChildren(...facts.map(([k,v])=>{const f=document.createElement("div");f.className="fact";const a=document.createElement("small");a.textContent=k;const b=document.createElement("b");b.textContent=v;f.append(a,b);return f;}));
+    const cast=(d.credits?.cast||[]).slice(0,12);$("detailsCast").replaceChildren(...cast.map(p=>{const s=document.createElement("span");s.className="cast-chip";s.textContent=p.name;return s;}));if(!cast.length)$("detailsCast").textContent="Cast information unavailable.";
+    const trailer=(d.videos?.results||[]).find(v=>v.site==="YouTube"&&v.type==="Trailer"&&v.key);if(trailer){$("detailsTrailer").hidden=false;$("detailsTrailer").onclick=()=>window.open("https://www.youtube.com/watch?v="+encodeURIComponent(trailer.key),"_blank","noopener,noreferrer");}
+    const similar=(d.similar?.results||[]).filter(x=>x.poster_path).slice(0,12);similar.forEach(x=>$("similarRow").append(card(x,state.currentType)));
+    if(state.currentType==="tv"){const seasons=(d.seasons||[]).filter(s=>s.season_number>=0);$("seasonsPanel").hidden=false;$("seasonSelect").replaceChildren(...seasons.map(s=>{const o=document.createElement("option");o.value=s.season_number;o.textContent=s.name||"Season "+s.season_number;return o;}));$("seasonSelect").onchange=()=>loadEpisodes(d.id,Number($("seasonSelect").value));const first=seasons.find(s=>s.season_number>0)||seasons[0];if(first){$("seasonSelect").value=first.season_number;loadEpisodes(d.id,first.season_number);}}
+  }catch(e){$("detailsOverview").textContent=e.message;}
+  $("detailsList").textContent=state.myList.some(x=>x.id===item.id&&x.type===state.currentType)?"✓ In My List":"＋ My List";
+  $("detailsList").onclick=()=>toggleMyList(item,state.currentType);
+  $("detailsPlay").onclick=()=>{if(state.currentType==="tv"){const s=Number($("seasonSelect").value||1);const firstEpisode=Number($("episodeList").querySelector("[data-episode]")?.dataset.episode||1);playVOD(d||item,"tv",s,firstEpisode);}else playVOD(state.currentDetails||item,"movie");};
+}
+async function loadEpisodes(id,season){
+  $("episodeList").innerHTML='<p class="muted">Loading episodes…</p>';
+  try{const d=await tmdb("tv/"+id+"/season/"+season);$("episodeList").replaceChildren();(d.episodes||[]).forEach(ep=>{const b=document.createElement("button");b.className="episode-row";b.dataset.episode=ep.episode_number;const imgEl=document.createElement("img");imgEl.src=image(ep.still_path,"w300");imgEl.alt="";const copy=document.createElement("span");const title=document.createElement("b");title.textContent=ep.episode_number+". "+ep.name;const sub=document.createElement("small");sub.textContent=ep.overview||"Play this episode";copy.append(title,sub);b.append(imgEl,copy);b.onclick=()=>playVOD(state.currentDetails,"tv",season,ep.episode_number);$("episodeList").append(b);});if(!d.episodes?.length)$("episodeList").textContent="No episodes are listed for this season.";
+  }catch(e){$("episodeList").textContent=e.message;}
+}
+function toggleMyList(item,type){
+  const key=String(item.id),found=state.myList.findIndex(x=>String(x.id)===key&&x.type===type);
+  if(found>=0){state.myList.splice(found,1);toast("Removed from My List.");}else{state.myList.unshift({id:item.id,type,title:titleOf(item),poster_path:item.poster_path,backdrop_path:item.backdrop_path,release_date:item.release_date||item.first_air_date,vote_average:item.vote_average});toast("Added to My List.");}
+  writeStore("jokstream_mylist",state.myList);$("detailsList").textContent=state.myList.some(x=>String(x.id)===key&&x.type===type)?"✓ In My List":"＋ My List";
+}
+async function renderMyList(){
+  const host=$("myListGrid");host.replaceChildren();
+  if(!state.myList.length){host.innerHTML='<div class="empty-state">Your list is empty. Add a movie or series to keep it here.</div>';return;}
+  for(const item of state.myList){let full=item;try{full=await tmdb(item.type+"/"+item.id);}catch{}host.append(card(full,item.type));}
+}
+function closeModal(id){$(id).classList.remove("open");$(id).setAttribute("aria-hidden","true");}
+function progressKey(type,id,season,episode){return "jokstream_progress:"+type+":"+id+(type==="tv"?":"+season+":"+episode:"");}
+function buildEmbedUrl(item,type,season,episode){
+  const url=new URL(type==="tv"?"/embed/tv/"+item.id+(season?"/"+season+"/"+episode:""):"/embed/movie/"+item.id,VIDSRC);
+  url.searchParams.set("ds_lang","en,ar");
+  if(type==="tv"&&!season)url.searchParams.set("autonext","1");
+  if(state.selectedSubtitle){url.searchParams.set("sub_url",state.selectedSubtitle.url);url.searchParams.set("sub_label",state.selectedSubtitle.label);url.searchParams.set("sub_lang",state.selectedSubtitle.language);}
+  return url.toString();
+}
+function playVOD(item,type="movie",season=null,episode=null){
+  if(!item)return;state.current=item;state.currentType=type;state.currentEpisode=type==="tv"?{season,episode}:null;state.selectedSubtitle=null;
+  closeModal("detailsModal");$("playerModal").classList.add("open");$("playerModal").setAttribute("aria-hidden","false");
+  $("playerTitle").textContent=titleOf(item)+(type==="tv"&&season?" · S"+season+" E"+episode:"");
+  $("playerState").textContent="LOADING";$("embedPlaceholder").hidden=false;$("embedPlaceholder").querySelector("b").textContent="Preparing your stream";
+  $("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());
+  const frame=document.createElement("iframe");frame.id="vidFrame";frame.title="JOKSTREAM video player";frame.src=buildEmbedUrl(item,type,season,episode);
+  frame.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";frame.allowFullscreen=true;frame.referrerPolicy="strict-origin-when-cross-origin";
+  frame.setAttribute("sandbox","allow-scripts allow-same-origin allow-forms allow-presentation");
+  frame.addEventListener("load",()=>{$("embedPlaceholder").hidden=true;$("playerState").textContent="PLAYER READY";});
+  $("embedStage").append(frame);
+  $("playerProgress").textContent="Progress is stored on this device when playback events are received.";
+  $("playbackRate").textContent=state.currentRate+"×";
+}
+function sendPlayerCommand(action,value){
+  const frame=$("embedStage").querySelector("iframe");if(!frame?.contentWindow){toast("The player is not ready yet.",true);return;}
+  const message={player:true,action};if(value!==undefined)message.value=value;
+  frame.contentWindow.postMessage(message,VIDSRC);
+}
+window.addEventListener("message",event=>{
+  if(event.origin!==VIDSRC)return;
+  let payload=event.data;if(typeof payload==="string"){try{payload=JSON.parse(payload)}catch{return}}
+  if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
+  const data=payload.data,info=data.player_info||{},status=data.player_status||"";
+  if(status)$("playerState").textContent=status.toUpperCase();
+  const progress=Number(data.player_progress),duration=Number(data.player_duration);
+  if(Number.isFinite(progress)&&progress>=0&&state.current){const p={time:Math.floor(progress),duration:Number.isFinite(duration)?Math.floor(duration):0,updatedAt:Date.now()};const key=progressKey(state.currentType,state.current.id,info.season||state.currentEpisode?.season,info.episode||state.currentEpisode?.episode);localStorage.setItem(key,JSON.stringify(p));$("playerProgress").textContent="Resume point saved · "+formatTime(progress)+(duration>0?" / "+formatTime(duration):"");}
+  if(status==="completed"&&state.currentType==="tv"&&state.currentEpisode)toast("Episode completed. Choose the next episode when you're ready.");
+});
+function formatTime(s){const n=Math.max(0,Math.floor(s));return Math.floor(n/3600)+":"+String(Math.floor(n%3600/60)).padStart(2,"0")+":"+String(n%60).padStart(2,"0");}
+async function searchSubtitles(){
+  if(!state.current){toast("Start a title first.",true);return;}
+  const lang=$("subtitleLanguage").value.trim()||"en,ar",d=state.currentDetails||state.current;
+  const params={query:titleOf(d),languages:lang,type:state.currentType,year:yearOf(d)};
+  if(d.external_ids?.imdb_id){params[state.currentType==="tv"?"parent_imdb_id":"imdb_id"]=d.external_ids.imdb_id;}
+  if(state.currentEpisode){params.season_number=state.currentEpisode.season;params.episode_number=state.currentEpisode.episode;}
+  $("subtitleResults").innerHTML='<p class="muted">Searching subtitle providers…</p>';
+  try{
+    const result=await apiJson(JOKSTREAM_API+"/api/subtitles",params),items=result.items||[];
+    $("subtitleResults").replaceChildren();
+    if(!items.length){$("subtitleResults").innerHTML='<p class="muted">No matching external subtitles were found. Built-in player subtitles are still available.</p>';return;}
+    items.forEach(item=>(item.files||[]).forEach(file=>{
+      const row=document.createElement("div");row.className="subtitle-result";const info=document.createElement("div");const name=document.createElement("b");name.textContent=(item.language||"Unknown").toUpperCase()+" · "+(file.file_name||item.release||"Subtitle");const sub=document.createElement("small");sub.textContent=(item.download_count||0).toLocaleString()+" downloads"+(item.hearing_impaired?" · SDH":"");info.append(name,sub);
+      const button=document.createElement("button");button.textContent="Use subtitle";button.onclick=()=>attachSubtitle(item,file);row.append(info,button);$("subtitleResults").append(row);
+    }));
+  }catch(e){$("subtitleResults").textContent="Subtitle search unavailable: "+e.message;}
+}
+function attachSubtitle(item,file){
+  const url=JOKSTREAM_API+"/api/subtitles/download?file_id="+encodeURIComponent(file.file_id);
+  state.selectedSubtitle={url,label:item.language.toUpperCase()+" · "+(file.file_name||"External subtitle"),language:item.language||"en"};
+  closeModal("subtitleModal");
+  if(state.current){const ep=state.currentEpisode;playVOD(state.current,state.currentType,ep?.season||null,ep?.episode||null);}
+  toast("External subtitle selected. The player will load it when supported.");
+}
+function openSubtitles(){if(!state.current){toast("Open a movie or series first.",true);return;}$("subtitleModal").classList.add("open");$("subtitleModal").setAttribute("aria-hidden","false");$("subtitleResults").innerHTML='<p class="muted">Choose your preferred languages and search for available subtitles.</p>';}
+function normalizeChannel(item){
+  const id=item.stream_id??item.id??item.streamId;
+  return {id:String(id??""),name:safe(item.name||item.title||"Unknown channel"),category:String(item.category_id??item.categoryId??""),categoryName:safe(item.category_name||item.categoryName||"Other"),logo:item.stream_icon||item.streamIcon||item.logo||"",country:item.country||""};
+}
+async function loadLive(){
+  if(state.liveChannels.length){renderChannels();return;}
+  $("liveStatus").textContent="Loading channel catalogue…";
+  try{
+    const first=await apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page:1,limit:100});
+    if(!first.ok)throw new Error(first.error||"Channel catalogue unavailable");
+    const all=[...(first.items||[])];let page=2;
+    while(first.total&&all.length<first.total&&page<=30){const next=await apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page,limit:100});all.push(...(next.items||[]));if(!next.has_more)break;page++;}
+    state.liveChannels=all.map(normalizeChannel).filter(x=>x.id);
+    state.liveCategories=first.categories||[];
+    $("liveCount").textContent=state.liveChannels.length.toLocaleString();
+    $("liveStatus").textContent=state.liveChannels.length?"Channel catalogue ready":"No channels published by the provider.";
+    renderCategories();renderChannels();
+  }catch(e){$("liveStatus").textContent="Channel service unavailable";$("channelList").innerHTML='<div class="empty-state">Could not load channels. '+escapeHtml(e.message)+'</div>';toast("Live TV connection failed.",true);}
+}
+function renderCategories(){
+  const host=$("channelCategories");host.replaceChildren();
+  const all=document.createElement("button");all.className="category-pill active";all.textContent="All channels";all.onclick=()=>{state.liveCategory="";renderCategories();renderChannels();};host.append(all);
+  state.liveCategories.forEach(cat=>{const b=document.createElement("button");b.className="category-pill";b.textContent=cat.category_name||cat.name||"Category";b.onclick=()=>{state.liveCategory=String(cat.category_id??cat.id??"");renderCategories();renderChannels();};b.classList.toggle("active",b.dataset.category===state.liveCategory);b.dataset.category=state.liveCategory;host.append(b);});
+}
+function renderChannels(){
+  const host=$("channelList"),q=state.liveSearch.toLowerCase();
+  const rows=state.liveChannels.filter(c=>(!state.liveCategory||c.category===state.liveCategory)&&(!q||(c.name+" "+c.categoryName+" "+c.country).toLowerCase().includes(q)));
+  $("channelResults").textContent=rows.length.toLocaleString()+" results";host.replaceChildren();
+  if(!rows.length){host.innerHTML='<div class="empty-state">No channels match your search.</div>';return;}
+  rows.slice(0,700).forEach(c=>{
+    const b=document.createElement("button");b.className="channel-row";b.dataset.id=c.id;
+    const logo=document.createElement("span");logo.className="channel-logo";
+    if(c.logo&&/^https?:\/\//i.test(c.logo)){const im=document.createElement("img");im.src=c.logo;im.alt="";im.loading="lazy";im.onerror=()=>{logo.textContent=c.name.slice(0,1);};logo.append(im);}else logo.textContent=c.name.slice(0,1).toUpperCase();
+    const info=document.createElement("span"),name=document.createElement("b"),meta=document.createElement("small");info.style.minWidth="0";name.className="channel-name";name.textContent=c.name;meta.className="channel-meta";meta.textContent=c.categoryName;info.append(name,meta);
+    const play=document.createElement("span");play.className="channel-play";play.textContent="▶";b.append(logo,info,play);b.onclick=()=>playLive(c);host.append(b);
   });
 }
-
-function setPlayerMessage(message, visible = true) {
-  $("playerMessage").textContent = message;
-  $("playerMessage").classList.toggle("hidden", !visible);
+function stopLive(){if(state.liveEngine){try{state.liveEngine.destroy();}catch{}state.liveEngine=null;}const video=$("liveVideo");video.pause();video.removeAttribute("src");video.load();}
+function playLive(channel){
+  stopLive();document.querySelectorAll(".channel-row").forEach(x=>x.classList.toggle("active",x.dataset.id===channel.id));
+  $("liveNowTitle").textContent=channel.name;$("liveNowMeta").textContent=channel.categoryName;$("livePlaceholder").hidden=true;$("liveStatus").textContent="Connecting to live stream…";
+  const video=$("liveVideo"),base=JOKSTREAM_API+"/stream/live/"+encodeURIComponent(channel.id)+".ts";
+  if(window.mpegts&&mpegts.isSupported()){
+    const player=mpegts.createPlayer({type:"mpegts",isLive:true,url:base},{enableWorker:true,enableStashBuffer:true,stashInitialSize:128});
+    state.liveEngine=player;player.attachMediaElement(video);player.load();player.play().then(()=>$("liveStatus").textContent="Live stream connected").catch(()=>{$("liveStatus").textContent="Tap play to start the stream";});
+    player.on(mpegts.Events.ERROR,()=>{if(state.liveEngine!==player)return;player.destroy();state.liveEngine=null;playLiveHlsFallback(channel);});
+  }else playLiveHlsFallback(channel);
 }
-
-function configureAdaptiveHls(videoElement, streamUrl, channel) {
-  stopCurrentHls();
-  let networkRecoveryAttempts = 0;
-  const HlsCtor = window.Hls;
-  if (!HlsCtor || !HlsCtor.isSupported()) {
-    videoElement.src = streamUrl;
-    videoElement.play().catch(() => {});
-    return;
-  }
-  let HlsWithP2P = HlsCtor;
-  const P2P = window.p2pml && window.p2pml.hlsjs && window.p2pml.hlsjs.HlsJsP2PEngine;
-  if (P2P && typeof P2P.injectMixin === "function") {
-    try { HlsWithP2P = P2P.injectMixin(HlsCtor); } catch (error) { console.warn("P2P engine unavailable; using HLS.js only.", error); }
-  }
-  const hlsConfig = {
-    enableWorker: true,
-    lowLatencyMode: true,
-    startLevel: -1,
-    capLevelToPlayerSize: true,
-    maxBufferLength: 18,
-    maxMaxBufferLength: 36,
-    maxBufferSize: 45 * 1000 * 1000,
-    abrEwmaDefaultEstimate: 350000,
-    abrBandWidthFactor: 0.85,
-    abrBandWidthUpFactor: 0.65,
-    testBandwidth: true,
-    backBufferLength: 30
+function playLiveHlsFallback(channel){
+  const video=$("liveVideo"),url=JOKSTREAM_API+"/stream/live/"+encodeURIComponent(channel.id)+".m3u8";
+  if(video.canPlayType("application/vnd.apple.mpegurl")){video.src=url;video.play().then(()=>$("liveStatus").textContent="Live stream connected").catch(()=>$("liveStatus").textContent="Tap play to start the stream");}
+  else{$("liveStatus").textContent="This browser cannot play the selected live format.";$("livePlaceholder").hidden=false;}
+}
+function renderSearchResults(items){
+  const host=$("searchGrid");host.replaceChildren();state.lastResults=items||[];
+  if(!items?.length){host.innerHTML='<div class="empty-state">No matching movies or series were found.</div>';return;}
+  items.filter(x=>["movie","tv"].includes(x.media_type)||x.title||x.name).forEach(x=>host.append(card(x,mediaType(x))));
+}
+async function runSearch(query){
+  const q=query.trim();if(q.length<2)return;state.searchQuery=q;showView("search");$("searchHeading").textContent="Results for “"+q+"”";
+  try{const d=await tmdb("search/multi",{query:q,page:1});renderSearchResults((d.results||[]).filter(x=>["movie","tv"].includes(x.media_type)&&x.poster_path));}
+  catch(e){$("searchGrid").innerHTML='<div class="empty-state">Search unavailable: '+escapeHtml(e.message)+'</div>';}
+}
+function setupPopupProtection(){
+  const original=window.open;
+  window.open=function(url,target,features){
+    try{const dest=new URL(url||"about:blank",location.href);if(dest.origin!==location.origin){console.info("JOKSTREAM blocked a page-level external popup");return null;}}
+    catch{return null;}
+    return original.call(window,url,target,features);
   };
-  if (HlsWithP2P !== HlsCtor) {
-    hlsConfig.p2p = { core: { swarmId: `jokstream-${slugify(channel.name)}-${slugify(channel.group || "live")}` } };
-  }
-  hlsInstance = new HlsWithP2P(hlsConfig);
-  hlsInstance.loadSource(streamUrl);
-  hlsInstance.attachMedia(videoElement);
-  hlsInstance.on(HlsCtor.Events.MANIFEST_PARSED, () => {
-    $("playerStatus").textContent = P2P ? "Live stream ready · adaptive quality / P2P when supported" : "Live stream ready · adaptive quality";
-    videoElement.play().then(() => setPlayerMessage("", false)).catch(() => setPlayerMessage("Press play to start the stream.", true));
+  document.addEventListener("click",event=>{
+    const link=event.target.closest?.("a[target='_blank']");if(!link)return;
+    try{if(new URL(link.href,location.href).origin!==location.origin){event.preventDefault();event.stopImmediatePropagation();}}
+    catch{event.preventDefault();event.stopImmediatePropagation();}
+  },true);
+}
+function setupEvents(){
+  document.addEventListener("click",event=>{
+    const route=event.target.closest("[data-route]")?.dataset.route;if(route){event.preventDefault();showView(route);}
+    const close=event.target.closest("[data-close]")?.dataset.close;if(close){closeModal(close==="details"?"detailsModal":close==="player"?"playerModal":"subtitleModal");if(close==="player"){$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}}
   });
-  hlsInstance.on(HlsCtor.Events.LEVEL_SWITCHED, (_event, data) => {
-    const level = hlsInstance && hlsInstance.levels[data.level];
-    if (level && level.height) $("playerStatus").textContent = `Playing · ${level.height}p adaptive quality`;
-  });
-  hlsInstance.on(HlsCtor.Events.ERROR, (_event, data) => {
-    if (!data.fatal) return;
-    $("playerStatus").textContent = "Stream unavailable — try another authorized source";
-    setPlayerMessage("This source may be offline, unsupported, or deny browser playback. Access controls are not bypassed.", true);
-    if (data.type === HlsCtor.ErrorTypes.NETWORK_ERROR && networkRecoveryAttempts < 1) {
-      networkRecoveryAttempts += 1;
-      hlsInstance.startLoad();
-    }
-    else if (data.type === HlsCtor.ErrorTypes.MEDIA_ERROR) hlsInstance.recoverMediaError();
-    else stopCurrentHls();
-  });
+  $("loadMoreTitles").onclick=()=>{state.browsePage++;loadBrowse(false);};
+  $("sortSelect").onchange=()=>{state.browsePage=1;loadBrowse(true);};
+  $("globalSearch").addEventListener("keydown",e=>{if(e.key==="Enter")runSearch(e.target.value);});
+  $("searchButton").onclick=()=>runSearch($("globalSearch").value);
+  $("myListButton").onclick=()=>showView("mylist");
+  $("channelSearch").oninput=e=>{state.liveSearch=e.target.value;renderChannels();};
+  $("liveFullscreen").onclick=()=>{const v=$("liveVideo");if(v.requestFullscreen)v.requestFullscreen();};
+  $("remote-controls");
+  document.querySelectorAll("[data-command]").forEach(b=>b.onclick=()=>{const a=b.dataset.command;sendPlayerCommand(a);if(a==="rate+"||a==="rate-"){state.currentRate=Math.max(.25,Math.min(4,state.currentRate+(a==="rate+"?.25:-.25)));$("playbackRate").textContent=state.currentRate.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")+"×";}});
+  $("openSubtitles").onclick=openSubtitles;$("subtitleSearchButton").onclick=searchSubtitles;
+  $("detailsModal").addEventListener("click",e=>{if(e.target.id==="detailsModal")closeModal("detailsModal");});
+  $("playerModal").addEventListener("click",e=>{if(e.target.id==="playerModal"){closeModal("playerModal");$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal("detailsModal");closeModal("subtitleModal");if($("playerModal").classList.contains("open")){closeModal("playerModal");$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}}});
+  $("seasonSelect").onchange=()=>loadEpisodes(state.current.id,Number($("seasonSelect").value));
 }
-
-function updateDynamicSeo(channel) {
-  if (!channel) return;
-  const name = safeText(channel.name, 100);
-  document.title = `${name} — Live channel and community chat | JokStream`;
-  const description = `Watch ${name} on JokStream and join the live channel chat. Stream availability depends on the source provider.`;
-  let meta = document.querySelector('meta[name="description"]');
-  if (!meta) { meta = document.createElement("meta"); meta.name = "description"; document.head.appendChild(meta); }
-  meta.content = description.slice(0, 160);
-  let schema = document.getElementById("jokstreamDynamicSchema");
-  if (!schema) { schema = document.createElement("script"); schema.id = "jokstreamDynamicSchema"; schema.type = "application/ld+json"; document.head.appendChild(schema); }
-  schema.textContent = JSON.stringify({"@context":"https://schema.org","@type":"BroadcastService","name":name,"broadcastDisplayName":name,"url":getSiteUrl(),"broadcastTimezone":"UTC","description":description});
-}
-
-function openPlayerOverlay(channel) {
-  const overlay = $("playerOverlay");
-  if (!overlay || overlayPlaceholders) return;
-  const playerCard = document.querySelector(".player-card");
-  const chatPanel = document.querySelector(".chat-panel");
-  const bannerSlot = $("belowPlayerAdSlot");
-  overlayPlaceholders = {
-    player: document.createComment("player-card-home"),
-    chat: document.createComment("chat-panel-home"),
-    banner: document.createComment("banner-slot-home"),
-    playerParent: playerCard.parentNode,
-    chatParent: chatPanel.parentNode,
-    bannerParent: bannerSlot.parentNode
-  };
-  playerCard.parentNode.insertBefore(overlayPlaceholders.player, playerCard);
-  chatPanel.parentNode.insertBefore(overlayPlaceholders.chat, chatPanel);
-  bannerSlot.parentNode.insertBefore(overlayPlaceholders.banner, bannerSlot);
-  $("overlayPlayerSlot").appendChild(playerCard);
-  $("overlayChatSlot").append(chatPanel, bannerSlot);
-  $("overlayChannelTitle").textContent = safeText(channel && channel.name || "Now watching", 100);
-  overlay.hidden = false;
-  document.body.classList.add("overlay-open");
-  document.body.style.overflow = "hidden";
-}
-
-function closePlayerOverlay() {
-  const overlay = $("playerOverlay");
-  if (!overlayPlaceholders || !overlay) return;
-  const playerCard = document.querySelector("#overlayPlayerSlot .player-card");
-  const chatPanel = document.querySelector("#overlayChatSlot .chat-panel");
-  const bannerSlot = $("overlayChatSlot #belowPlayerAdSlot");
-  if (playerCard) overlayPlaceholders.playerParent.insertBefore(playerCard, overlayPlaceholders.player.nextSibling);
-  if (chatPanel) overlayPlaceholders.chatParent.insertBefore(chatPanel, overlayPlaceholders.chat.nextSibling);
-  if (bannerSlot) overlayPlaceholders.bannerParent.insertBefore(bannerSlot, overlayPlaceholders.banner.nextSibling);
-  Object.values(overlayPlaceholders).filter((v) => v && v.nodeType === 8).forEach((node) => node.remove());
-  overlayPlaceholders = null;
-  overlay.hidden = true;
-  document.body.classList.remove("overlay-open");
-  document.body.style.overflow = "";
-}
-
-function playChannel(channel, selectedButton) {
-  currentChannel = channel;
-  updateDynamicSeo(channel);
-  openPlayerOverlay(channel);
-  setChatRoom(channel);
-  const videoElement = $("jokstreamPlayer");
-  videoElement.crossOrigin = "anonymous";
-  $("nowPlayingTitle").textContent = channel.name;
-  setPlayerMessage("Loading stream…", true);
-  $("playerStatus").textContent = "Connecting to stream…";
-  document.querySelectorAll(".channel-item.active").forEach((item) => item.classList.remove("active"));
-  if (selectedButton) selectedButton.classList.add("active");
-  stopCurrentHls();
-  videoElement.pause();
-  videoElement.removeAttribute("src");
-  videoElement.load();
-  const streamUrl = resolveStreamUrl(channel);
-  if (!streamUrl) {
-    $("playerStatus").textContent = "Unsupported stream URL";
-    setPlayerMessage("This channel URL could not be parsed.", true);
-    return;
-  }
-  const source = new URL(channel.url);
-  const isHls = /\.m3u8$/i.test(source.pathname);
-  $("playerStatus").textContent = "Opening authorized stream through your HTTPS Worker…";
-  if (isHls) {
-    configureAdaptiveHls(videoElement, streamUrl, channel);
-  } else {
-    videoElement.src = streamUrl;
-    videoElement.play().then(() => setPlayerMessage("", false)).catch(() => setPlayerMessage("Press play to start, or try another channel if the source is not supported.", true));
-  }
-  watchStartedAt = watchStartedAt || Date.now();
-}
-
-function setupCinemaMode() {
-  const button = $("cinemaModeButton");
-  button.addEventListener("click", () => {
-    const enabled = document.body.classList.toggle("cinema-mode");
-    button.setAttribute("aria-pressed", String(enabled));
-    button.textContent = enabled ? "Exit cinema" : "Cinema mode";
-    toast(enabled ? "Cinema mode enabled. Chat is floating." : "Cinema mode closed.");
-  });
-}
-
-function setupSmartBreakGate() {
-  const video = $("jokstreamPlayer");
-  // A generic player cannot reliably detect halftime or broadcaster ad breaks. Never
-  // interrupt active playback: only offer the share gate after 45 minutes when playback pauses.
-  video.addEventListener("pause", () => {
-    if (!currentChannel || !shareUnlockedThisSession || !watchStartedAt) return;
-    if (Date.now() - watchStartedAt < SHARE_GATE_INTERVAL_MS || pendingGateChannel) return;
-    breakGatePending = true;
-    pendingGateChannel = { channel: currentChannel, selectedButton: document.querySelector(".channel-item.active") };
-    openShareGate();
-  });
-  video.addEventListener("playing", () => {
-    if (watchStartedAt && Date.now() - watchStartedAt >= SHARE_GATE_INTERVAL_MS) {
-      $("playerStatus").textContent = "Watching live · share reminder will wait for a pause";
-    }
-  });
-}
-
-function getSiteUrl() { return window.location.href.split("#")[0]; }
-
-async function copySiteUrl() {
-  const url = getSiteUrl();
-  try {
-    await navigator.clipboard.writeText(url);
-    toast("Website link copied.");
-  } catch {
-    const field = document.createElement("textarea");
-    field.value = url;
-    field.style.position = "fixed";
-    field.style.opacity = "0";
-    document.body.appendChild(field);
-    field.select();
-    const copied = document.execCommand("copy");
-    field.remove();
-    toast(copied ? "Website link copied." : "Copy failed. Please copy the address bar URL.", !copied);
-  }
-}
-
-function openShareModal() { $("shareModal").hidden = false; document.body.style.overflow = "hidden"; }
-function closeShareModal() { $("shareModal").hidden = true; document.body.style.overflow = ""; }
-
-function setupShare() {
-  const message = `Discover JokStream — live TV and entertainment in one place: ${getSiteUrl()}`;
-  $("whatsappShareButton").href = `https://wa.me/?text=${encodeURIComponent(message)}`;
-  $("openShareModalButton").addEventListener("click", openShareModal);
-  $("closeShareModalButton").addEventListener("click", closeShareModal);
-  $("continueWatchingButton").addEventListener("click", closeShareModal);
-  $("modalCopyLinkButton").addEventListener("click", copySiteUrl);
-  $("copySiteLinkButton").addEventListener("click", copySiteUrl);
-  $("shareModal").querySelector("[data-close-modal]").addEventListener("click", closeShareModal);
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !$("shareModal").hidden) closeShareModal(); });
-}
-
-function setChatStatus(text, connected = false) {
-  const status = $("chatConnectionStatus");
-  status.textContent = text;
-  status.classList.toggle("connected", connected);
-}
-
-function clearChatMessages(message) {
-  const container = $("chatMessages");
-  container.replaceChildren();
-  const empty = document.createElement("div");
-  empty.className = "chat-empty";
-  empty.textContent = message;
-  container.appendChild(empty);
-}
-
-function renderChatMessage(message) {
-  const messages = $("chatMessages");
-  const empty = messages.querySelector(".chat-empty");
-  if (empty) empty.remove();
-  // Avoid rendering the same realtime message twice when the sender receives its own broadcast.
-  const messageId = message.id ? String(message.id) : "";
-  if (messageId && messages.querySelector(`[data-message-id="${messageId}"]`)) return;
-  const row = document.createElement("div");
-  row.className = "chat-message";
-  if (messageId) row.dataset.messageId = messageId;
-  const head = document.createElement("div");
-  head.className = "chat-message-head";
-  const name = document.createElement("span");
-  name.className = "chat-message-name";
-  name.textContent = safeText(message.display_name || message.name || "Viewer", CHAT_CONFIG.maxNicknameLength);
-  const time = document.createElement("span");
-  time.className = "chat-message-time";
-  const createdAt = message.created_at || message.createdAt;
-  time.textContent = createdAt ? new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-  const text = document.createElement("div");
-  text.className = "chat-message-text";
-  text.textContent = safeText(message.message || message.text, CHAT_CONFIG.maxMessageLength);
-  head.append(name, time);
-  row.append(head, text);
-  messages.appendChild(row);
-  while (messages.children.length > CHAT_CONFIG.maxMessages) messages.firstElementChild.remove();
-  messages.scrollTop = messages.scrollHeight;
-}
-
-async function setChatRoom(channel) {
-  if (!channel) return;
-  const nextKey = channel.chatRoom || slugify(channel.name);
-  if (nextKey === chatRoomKey) return;
-  chatRoomKey = nextKey;
-  presenceRoomKey = nextKey;
-  const viewerCounter = $("viewerCount");
-  if (viewerCounter) viewerCounter.textContent = "👁️ Connecting viewers…";
-  if (supabaseChatChannel && supabaseClient) {
-    try { await supabaseClient.removeChannel(supabaseChatChannel); } catch (_) {}
-    supabaseChatChannel = null;
-  }
-  $("chatRoomLabel").textContent = `Room: ${safeText(channel.name, 90)}`;
-  clearChatMessages("Connecting to this channel's shared chat…");
-  $("chatMessageInput").disabled = true;
-  $("chatSendButton").disabled = true;
-  setChatStatus("Connecting…", false);
-  if (!supabaseClient) {
-    clearChatMessages("Chat service could not start. Please refresh and try again.");
-    setChatStatus("Unavailable", false);
-    $("chatFeedback").textContent = "The shared chat service did not initialize.";
-    return;
-  }
-  const roomAtStart = nextKey;
-  const { data, error } = await supabaseClient.from("chat_messages")
-    .select("id, channel_id, display_name, message, created_at")
-    .eq("channel_id", roomAtStart).order("created_at", { ascending: false }).limit(CHAT_CONFIG.maxMessages);
-  if (chatRoomKey !== roomAtStart) return;
-  if (error) {
-    clearChatMessages("Could not load shared messages. The chat database may need its access policies checked.");
-    setChatStatus("Connection error", false);
-    $("chatFeedback").textContent = "Could not load chat history. Please try again later.";
-    console.error("JokStream chat history error:", error.message);
-    return;
-  }
-  clearChatMessages("No messages yet. Start the conversation!");
-  (data || []).reverse().forEach(renderChatMessage);
-  supabaseChatChannel = supabaseClient.channel(`jokstream-chat-${roomAtStart}`, { config: { presence: { key: presenceViewerId } } })
-    .on("postgres_changes", {
-      event: "INSERT", schema: "public", table: "chat_messages", filter: `channel_id=eq.${roomAtStart}`
-    }, (payload) => {
-      if (chatRoomKey === roomAtStart) renderChatMessage(payload.new);
-    })
-    .on("presence", { event: "sync" }, () => {
-      if (chatRoomKey !== roomAtStart || !supabaseChatChannel) return;
-      const state = supabaseChatChannel.presenceState();
-      const count = Object.keys(state || {}).length;
-      const counter = $("viewerCount");
-      if (counter) counter.textContent = `👁️ ${count.toLocaleString()} watching now`;
-    })
-    .subscribe(async (status) => {
-      if (chatRoomKey !== roomAtStart) return;
-      if (status === "SUBSCRIBED") {
-        try { await supabaseChatChannel.track({ viewer_id: presenceViewerId, channel_id: roomAtStart, joined_at: new Date().toISOString() }); }
-        catch (error) { console.warn("Presence tracking unavailable:", error); }
-        setChatStatus("Live chat", true);
-        $("chatMessageInput").disabled = false;
-        $("chatSendButton").disabled = false;
-        $("chatFeedback").textContent = "You are in the shared room for this channel. Messages are visible to other visitors in the same room.";
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        setChatStatus("Reconnecting…", false);
-        $("chatFeedback").textContent = "Live connection interrupted. The chat will attempt to reconnect.";
-      }
-    });
-}
-
-function initializeChat() {
-  $("chatForm").addEventListener("submit", sendChatMessage);
-  if (!window.supabase || typeof window.supabase.createClient !== "function") {
-    setChatStatus("Unavailable", false);
-    $("chatFeedback").textContent = "Could not load the chat service library. Check your connection and refresh.";
-    return;
-  }
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    realtime: { params: { eventsPerSecond: 5 } }
-  });
-  setChatStatus("Ready", false);
-  if (currentChannel) setChatRoom(currentChannel);
-}
-
-async function sendChatMessage(event) {
-  event.preventDefault();
-  if (!chatRoomKey || !supabaseClient) {
-    $("chatFeedback").textContent = "Choose a channel and wait for the shared chat to connect.";
-    return;
-  }
-  const nickname = safeText($("chatNickname").value || "Viewer", CHAT_CONFIG.maxNicknameLength) || "Viewer";
-  const messageText = safeText($("chatMessageInput").value, CHAT_CONFIG.maxMessageLength);
-  if (!messageText) return;
-  const now = Date.now();
-  if (now - lastChatSend < CHAT_CONFIG.minSendIntervalMs) {
-    $("chatFeedback").textContent = "Please wait a moment before sending another message.";
-    return;
-  }
-  lastChatSend = now;
-  $("chatSendButton").disabled = true;
-  const roomAtSend = chatRoomKey;
-  const { error } = await supabaseClient.from("chat_messages").insert({
-    channel_id: roomAtSend,
-    display_name: nickname,
-    message: messageText
-  });
-  if (error) {
-    $("chatFeedback").textContent = "Message not sent. Check your connection and try again.";
-    console.error("JokStream chat send error:", error.message);
-  } else {
-    $("chatMessageInput").value = "";
-    $("chatFeedback").textContent = "Message sent to this channel's shared chat.";
-  }
-  if (chatRoomKey === roomAtSend && $("chatConnectionStatus").textContent.includes("Live")) $("chatSendButton").disabled = false;
-}
-
-function loadMonetagTag(zoneId, src, parent, key) {
-  if (document.querySelector(`script[data-jokstream-ad="${key}"]`)) return;
-  const script = document.createElement("script");
-  script.dataset.jokstreamAd = key;
-  script.dataset.zone = String(zoneId);
-  script.src = src;
-  script.async = true;
-  (parent || document.body).appendChild(script);
-}
-
-function initializeMonetagAds() {
-  // These are the exact owner-supplied zone IDs and script URLs. Monetag controls final delivery and eligibility.
-  loadMonetagTag("12117072", "https://n6wxm.com/vignette.min.js", document.body, "vignette");
-  loadMonetagTag("12117045", "https://nap5k.com/tag.min.js", $("monetagInlineBannerSlot") || document.body, "banner-inline");
-  try {
-    const last = Number(localStorage.getItem(POPUNDER_STORAGE_KEY) || 0);
-    if (Date.now() - last >= POPUNDER_INTERVAL_MS) {
-      localStorage.setItem(POPUNDER_STORAGE_KEY, String(Date.now()));
-      loadMonetagTag("12117037", "https://al5sm.com/tag.min.js", document.body, "popunder-30m");
-    }
-  } catch (_) {
-    // If storage is unavailable, load at most once in this document lifetime.
-    loadMonetagTag("12117037", "https://al5sm.com/tag.min.js", document.body, "popunder-session");
-  }
-}
-
-function setupInstallButton() {
-  const installButton = $("installButton");
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault(); deferredInstallPrompt = event; installButton.hidden = false;
-  });
-  installButton.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    installButton.hidden = true;
-  });
-  window.addEventListener("appinstalled", () => { installButton.hidden = true; toast("JokStream has been installed."); });
-}
-
-function registerServiceWorker() {
-  // Monetag requires its downloaded /sw.js file at the site root.
-  // Do not register pwa-sw.js at the same root scope: a second worker would replace Monetag's worker.
-  // pwa-sw.js is retained in the package as an optional offline-cache implementation for a future
-  // deployment where the ad provider's worker and app worker can be safely coordinated.
-  console.info("Monetag worker is served from /sw.js; app shell worker registration is intentionally disabled to avoid a scope conflict.");
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  $("year").textContent = new Date().getFullYear();
-  $("channelSearch").addEventListener("input", applyChannelFilters);
-  $("categoryFilter").addEventListener("change", () => {
-    $("categoryFilter").dataset.smartCategory = "";
-    const host = $("categoryQuickFilters");
-    if (host) host.querySelectorAll(".category-chip").forEach((chip) => {
-      chip.setAttribute("aria-pressed", String(chip.dataset.category === $("categoryFilter").value));
-    });
-    applyChannelFilters();
-  });
-  $("loadMoreButton").addEventListener("click", () => { visibleCount += CHANNELS_PER_PAGE; renderChannels(); });
-  setupShare();
-  setupShareGate();
-  initializeMonetagAds();
-  $("closePlayerOverlay").addEventListener("click", closePlayerOverlay);
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !$("playerOverlay").hidden) closePlayerOverlay(); });
-  setupCinemaMode();
-  setupSmartBreakGate();
-  setupInstallButton();
-  registerServiceWorker();
-  loadChannels();
-  initializeChat();
+document.addEventListener("DOMContentLoaded",()=>{
+  $("year").textContent=new Date().getFullYear();setupPopupProtection();setupEvents();home();
+  $("liveVideo").addEventListener("playing",()=>$("liveStatus").textContent="Playing live");$("liveVideo").addEventListener("waiting",()=>$("liveStatus").textContent="Buffering live stream…");$("liveVideo").addEventListener("error",()=>$("liveStatus").textContent="Stream could not be played. Try another channel.");
 });
