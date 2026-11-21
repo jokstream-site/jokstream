@@ -2,145 +2,146 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#080b12">
-  <meta name="description" content="Explore live channels and join a channel-specific community chat on JokStream.">
-  <meta name="keywords" content="JokStream, live channels, live TV, channel chat">
-  <meta property="og:title" content="JokStream — Live TV & Community Chat">
-  <meta property="og:description" content="Explore live channels and join the conversation.">
+  <meta name="description" content="JOKSTREAM — live television, movies and series in one premium streaming destination.">
+  <meta property="og:title" content="JOKSTREAM — Live TV, Movies & Series">
+  <meta property="og:description" content="Discover live channels, movies and series in one place.">
   <meta property="og:type" content="website">
-  <title>JokStream — Live TV & Entertainment</title>
+  <title>JOKSTREAM — Live TV, Movies & Series</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon-192.png" type="image/png">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <a class="brand" href="./" aria-label="JokStream home"><span class="brand-mark">J</span><span>Jok<span class="accent">Stream</span></span></a>
-      <div class="topbar-actions">
-        <span class="live-pill"><span class="live-dot"></span> LIVE TV</span>
-        <button id="installButton" class="button button-ghost" hidden>Install app</button>
-        <button id="openShareModalButton" class="button button-primary">Share</button>
-      </div>
-    </header>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="#" data-route="home" aria-label="JOKSTREAM home"><span class="brand-icon">J</span><span>JOK<span class="brand-accent">STREAM</span></span></a>
+    <nav class="desktop-nav" aria-label="Main navigation">
+      <button class="nav-link active" data-route="home">Home</button>
+      <button class="nav-link" data-route="live">Live TV</button>
+      <button class="nav-link" data-route="movies">Movies</button>
+      <button class="nav-link" data-route="series">Series</button>
+      <button class="nav-link" data-route="mylist">My List</button>
+    </nav>
+    <div class="top-actions">
+      <label class="global-search"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search titles..." autocomplete="off"></label>
+      <button class="icon-button" id="searchButton" aria-label="Search">⌕</button>
+      <button class="avatar-button" id="myListButton" aria-label="Open My List">＋</button>
+    </div>
+  </header>
 
-    <main>
-      <section class="hero">
-        <div>
-          <p class="eyebrow">YOUR WORLD. LIVE.</p>
-          <h1>Entertainment without <span class="accent">limits.</span></h1>
-          <p class="hero-copy">Explore live channels from around the world in one place.</p>
-        </div>
-        <div class="hero-stat"><span class="stat-number" id="channelCount">—</span><span class="stat-label">channels listed</span></div>
-      </section>
-
-      <section class="watch-grid" aria-label="Live player and channel chat">
-        <div class="main-column">
-          <section class="player-card">
-            <div class="section-heading player-heading">
-              <div><p class="eyebrow">NOW PLAYING</p><h2 id="nowPlayingTitle">Choose a channel</h2></div>
-              <div class="player-actions"><span class="quality-badge">LIVE</span><button id="cinemaModeButton" class="button button-ghost" type="button" aria-pressed="false">Cinema mode</button></div>
-            </div>
-            <div class="video-wrap">
-              <video id="jokstreamPlayer" controls preload="metadata" playsinline crossorigin="anonymous"></video>
-              <div id="playerMessage" class="player-message">Choose a channel from the list to start watching.</div>
-            </div>
-            <div class="player-footer"><span id="playerStatus">Ready when you are</span><span class="subtle">Stream availability depends on the provider.</span></div>
-          </section>
-        </div>
-
-        <aside class="side-column">
-          <section class="panel chat-panel">
-            <div class="section-heading"><div><p class="eyebrow">COMMUNITY</p><h2>Channel chat</h2></div><span id="chatConnectionStatus" class="connection-status"><i></i> Not connected</span></div>
-            <p id="chatRoomLabel" class="chat-room-label">Room: select a channel</p>
-            <div id="viewerCount" class="viewer-count" aria-live="polite">👁️ 0 watching now</div>
-            <label class="field-label" for="chatNickname">Your nickname</label>
-            <input id="chatNickname" class="text-field" maxlength="24" placeholder="Choose a nickname" autocomplete="nickname">
-            <div id="chatMessages" class="chat-messages" aria-live="polite"><div class="chat-empty">Connect to a channel to join its shared live chat.</div></div>
-            <form id="chatForm" class="chat-form">
-              <input id="chatMessageInput" class="text-field" maxlength="300" placeholder="Write a message…" autocomplete="off" disabled>
-              <button id="chatSendButton" class="button button-primary" type="submit" disabled>Send</button>
-            </form>
-            <p id="chatFeedback" class="form-feedback">Choose a channel to join its shared live chat.</p>
-          </section>
-          <div class="ad-slot ad-slot-vertical" id="sidebarVignetteSlot">
-            <span class="ad-label">ADVERTISEMENT</span>
-            <div id="monetagBannerSlot"><strong>Sponsored</strong><p>Advertisements help support JokStream.</p></div>
+  <main id="appMain">
+    <section id="homeView" class="view active">
+      <section class="hero" id="hero">
+        <div class="hero-backdrop" id="heroBackdrop"></div>
+        <div class="hero-shade"></div>
+        <div class="hero-content">
+          <span class="eyebrow"><i></i> THE JOKSTREAM EXPERIENCE</span>
+          <h1 id="heroTitle">Entertainment,<br><em>without limits.</em></h1>
+          <p id="heroOverview">Discover your next favourite story across live television, movies and series.</p>
+          <div class="hero-meta" id="heroMeta"></div>
+          <div class="hero-actions">
+            <button class="button button-primary" id="heroPlay">▶ <span>Explore now</span></button>
+            <button class="button button-glass" id="heroInfo">More info</button>
           </div>
-          <section class="panel share-panel">
-            <p class="eyebrow">SPREAD THE WORD</p>
-            <h2>Enjoying JokStream?</h2>
-            <p>Share the experience with friends and invite them to watch with you.</p>
-            <button id="copySiteLinkButton" class="button button-ghost full-width">Copy website link</button>
-          </section>
-        </aside>
+        </div>
+        <div class="hero-index"><span>01</span><i></i><span>JOKSTREAM ORIGINAL EXPERIENCE</span></div>
       </section>
 
-      <div class="ad-slot" id="belowPlayerAdSlot">
-        <span class="ad-label">ADVERTISEMENT</span>
-        <div id="monetagInlineBannerSlot"><strong>Sponsored</strong><p>Advertisements help support JokStream.</p></div>
+      <section class="quick-entry">
+        <button class="quick-card live-quick" data-route="live"><span class="quick-icon">◉</span><span><b>Live Television</b><small>Watch channels in real time</small></span><span class="quick-arrow">↗</span></button>
+        <button class="quick-card movie-quick" data-route="movies"><span class="quick-icon">▣</span><span><b>Movies</b><small>Explore the latest releases</small></span><span class="quick-arrow">↗</span></button>
+        <button class="quick-card series-quick" data-route="series"><span class="quick-icon">▤</span><span><b>TV Series</b><small>Find your next episode</small></span><span class="quick-arrow">↗</span></button>
+      </section>
+
+      <div id="homeRows" class="content-rows">
+        <section class="shelf"><div class="section-heading"><div><span class="eyebrow">CURATED FOR YOU</span><h2>Trending Movies</h2></div><button class="text-link" data-route="movies">View all ↗</button></div><div class="poster-row" id="trendingMovies"><div class="skeleton-row"></div></div></section>
+        <section class="shelf"><div class="section-heading"><div><span class="eyebrow">BINGE-WORTHY</span><h2>Popular Series</h2></div><button class="text-link" data-route="series">View all ↗</button></div><div class="poster-row" id="popularSeries"><div class="skeleton-row"></div></div></section>
+        <section class="shelf"><div class="section-heading"><div><span class="eyebrow">THE CRITICS' CHOICE</span><h2>Top Rated Movies</h2></div><button class="text-link" data-route="movies">View all ↗</button></div><div class="poster-row" id="topMovies"><div class="skeleton-row"></div></div></section>
+        <section class="shelf"><div class="section-heading"><div><span class="eyebrow">NEW WORLDS TO DISCOVER</span><h2>Trending Series</h2></div><button class="text-link" data-route="series">View all ↗</button></div><div class="poster-row" id="trendingSeries"><div class="skeleton-row"></div></div></section>
       </div>
+    </section>
 
-      <section class="channel-section">
-        <div class="section-heading">
-          <div><p class="eyebrow">DISCOVER</p><h2>Live channels</h2></div>
-          <span id="resultsCount" class="subtle">Loading channels…</span>
-        </div>
-        <div class="search-row">
-          <label class="search-box"><span aria-hidden="true">⌕</span><input id="channelSearch" type="search" placeholder="Search channels or countries…" autocomplete="off"></label>
-          <select id="categoryFilter" aria-label="Filter channels"><option value="">All categories</option></select>
-          <nav id="categoryQuickFilters" class="category-quick-filters" aria-label="Quick channel categories"></nav>
-        </div>
-        <div id="channelList" class="channel-grid"><div class="empty-state">Loading the channel directory…</div></div>
-        <button id="loadMoreButton" class="button button-ghost load-more" hidden>Load more channels</button>
-        <p class="source-note">Channel directory: iptv-org public playlist. Availability, rights, and geographic restrictions are controlled by each stream provider. Use streams you are authorized to access and distribute.</p>
-      </section>
-    </main>
+    <section id="browseView" class="view page-view">
+      <div class="page-heading"><div><span class="eyebrow" id="browseEyebrow">EXPLORE THE LIBRARY</span><h1 id="browseTitle">Movies</h1><p id="browseDescription">Find something worth watching.</p></div>
+        <select id="sortSelect" class="select-control" aria-label="Sort titles"><option value="popularity.desc">Most popular</option><option value="primary_release_date.desc">Newest first</option><option value="vote_average.desc">Top rated</option></select>
+      </div>
+      <div class="filter-bar"><div id="genreFilters" class="genre-filters"></div><span id="browseCount" class="muted"></span></div>
+      <div id="browseGrid" class="poster-grid"></div>
+      <button id="loadMoreTitles" class="button button-glass load-more">Load more</button>
+    </section>
 
-    <footer class="footer"><span>© <span id="year"></span> JokStream</span><span>Watch responsibly. Respect content owners.</span></footer>
+    <section id="liveView" class="view page-view">
+      <div class="page-heading"><div><span class="eyebrow"><i class="live-dot"></i> LIVE AROUND THE WORLD</span><h1>Live TV</h1><p>Browse your channel lineup and tune in instantly.</p></div><div class="live-count"><b id="liveCount">—</b><span>channels available</span></div></div>
+      <div class="live-layout">
+        <section class="live-stage-card">
+          <div class="live-stage-top"><div><span class="live-now"><i></i> LIVE NOW</span><h2 id="liveNowTitle">Choose a channel</h2><p id="liveNowMeta">Your live stream will appear here.</p></div><button class="icon-button" id="liveFullscreen" aria-label="Fullscreen">⛶</button></div>
+          <div class="live-video-wrap"><video id="liveVideo" controls playsinline preload="none"></video><div id="livePlaceholder" class="video-placeholder"><span>◉</span><b>Ready when you are</b><small>Select a channel to start watching</small></div></div>
+          <div class="live-stage-footer"><span id="liveStatus">Connecting to channel service…</span><span class="secure-label">JOKSTREAM PLAYER</span></div>
+        </section>
+        <aside class="channel-browser">
+          <div class="channel-browser-head"><div><span class="eyebrow">CHANNEL GUIDE</span><h2>Channels</h2></div><span id="channelResults" class="muted">Loading…</span></div>
+          <input id="channelSearch" class="channel-search" type="search" placeholder="Search channels..." autocomplete="off">
+          <div id="channelCategories" class="channel-categories"><button class="category-pill active" data-category="">All channels</button></div>
+          <div id="channelList" class="channel-list"><div class="empty-state">Loading channel lineup…</div></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="mylistView" class="view page-view">
+      <div class="page-heading"><div><span class="eyebrow">YOUR PERSONAL COLLECTION</span><h1>My List</h1><p>Keep your favourites close. Pick up where you left off.</p></div></div>
+      <div id="myListGrid" class="poster-grid"></div>
+    </section>
+
+    <section id="searchView" class="view page-view">
+      <div class="page-heading"><div><span class="eyebrow">FIND YOUR NEXT WATCH</span><h1 id="searchHeading">Search</h1><p id="searchSummary">Search movies and series from the TMDB catalogue.</p></div></div>
+      <div id="searchGrid" class="poster-grid"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer"><a class="brand footer-brand" href="#" data-route="home"><span class="brand-icon">J</span><span>JOK<span class="brand-accent">STREAM</span></span></a><span>One destination. Endless entertainment.</span><span>© <span id="year"></span> JOKSTREAM</span></footer>
+
+  <div class="modal" id="detailsModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close="details"></div>
+    <article class="details-panel">
+      <button class="modal-close" data-close="details" aria-label="Close details">×</button>
+      <div class="details-backdrop" id="detailsBackdrop"></div><div class="details-gradient"></div>
+      <div class="details-topline"><span class="eyebrow" id="detailsType">JOKSTREAM LIBRARY</span><div class="details-copy"><h2 id="detailsTitle"></h2><div id="detailsMeta" class="details-meta"></div><p id="detailsOverview"></p><div class="details-actions"><button id="detailsPlay" class="button button-primary">▶ Watch now</button><button id="detailsList" class="button button-glass">＋ My List</button><button id="detailsTrailer" class="button button-glass" hidden>▷ Trailer</button></div></div></div>
+      <div class="details-body"><div class="details-columns"><section><h3>About this title</h3><p id="detailsTagline" class="muted"></p><div id="detailsFacts" class="facts-grid"></div><h3>Cast</h3><div id="detailsCast" class="cast-list"></div></section><section id="seasonsPanel" hidden><div class="section-heading"><div><span class="eyebrow">CONTINUE THE STORY</span><h3>Seasons & Episodes</h3></div><select id="seasonSelect" class="select-control"></select></div><div id="episodeList" class="episode-list"></div></section></div><section class="similar-section"><h3>You may also like</h3><div id="similarRow" class="poster-row"></div></section></div>
+    </article>
   </div>
 
-  <section id="playerOverlay" class="player-overlay" hidden aria-label="Channel player and live chat">
-    <header class="overlay-header"><span id="overlayChannelTitle">Now watching</span><button id="closePlayerOverlay" type="button" aria-label="Close player">×</button></header>
-    <div class="overlay-player-slot" id="overlayPlayerSlot"></div>
-    <div class="overlay-chat-slot" id="overlayChatSlot"></div>
-  </section>
-
-  <div id="shareModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
-    <div class="modal-backdrop" data-close-modal></div>
-    <div class="modal-card">
-      <button id="closeShareModalButton" class="modal-close" aria-label="Close dialog">×</button>
-      <div class="modal-icon">↗</div>
-      <p class="eyebrow">SHARE JOKSTREAM</p>
-      <h2 id="shareModalTitle">Good things are better shared.</h2>
-      <p>Invite friends to discover the live channel directory and watch together.</p>
-      <a id="whatsappShareButton" class="button button-whatsapp" href="https://wa.me/" target="_blank" rel="noopener noreferrer">Share on WhatsApp</a>
-      <button id="modalCopyLinkButton" class="button button-ghost full-width">Copy website link</button>
-      <button id="continueWatchingButton" class="text-button">Continue watching</button>
-      <p class="modal-note">Sharing is optional. A website cannot verify whether a WhatsApp message was actually sent.</p>
-    </div>
+  <div class="modal player-modal" id="playerModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close="player"></div>
+    <section class="player-panel">
+      <header class="player-header"><div><span class="eyebrow">NOW STREAMING</span><h2 id="playerTitle">JOKSTREAM Player</h2></div><div class="player-header-actions"><span id="playerState" class="player-state">READY</span><button class="modal-close inline-close" data-close="player" aria-label="Close player">×</button></div></header>
+      <div class="embed-stage" id="embedStage"><div id="embedPlaceholder" class="video-placeholder"><span>▶</span><b>Preparing your stream</b><small>The player will load here.</small></div></div>
+      <div class="remote-panel"><div class="remote-title"><span class="eyebrow">PLAYER REMOTE</span><span class="remote-hint">External controls · VidSrc</span></div><div class="remote-controls">
+        <button class="remote-btn" data-command="seek-10" title="Back 10 seconds">↶ <small>10s</small></button>
+        <button class="remote-btn remote-main" data-command="play" title="Play">▶</button>
+        <button class="remote-btn" data-command="pause" title="Pause">Ⅱ</button>
+        <button class="remote-btn" data-command="seek+10" title="Forward 10 seconds">↷ <small>10s</small></button>
+        <button class="remote-btn" data-command="mute" title="Mute">◖</button>
+        <button class="remote-btn" data-command="unmute" title="Unmute">◗</button>
+        <button class="remote-btn" data-command="rate-" title="Decrease speed">−</button>
+        <span id="playbackRate" class="rate-value">1×</span>
+        <button class="remote-btn" data-command="rate+" title="Increase speed">＋</button>
+        <button class="remote-btn subtitle-remote" id="openSubtitles">CC <small>Subtitles</small></button>
+      </div></div>
+      <div class="player-footer-note"><span id="playerProgress">Progress will be saved automatically when the provider reports it.</span><span class="shield-note">Popup restrictions enabled where supported</span></div>
+    </section>
   </div>
 
-  <div id="shareGateModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="shareGateTitle">
-    <div class="modal-backdrop"></div>
-    <div class="modal-card">
-      <div class="modal-icon">↗</div>
-      <p class="eyebrow">EXCLUSIVE CHANNEL</p>
-      <h2 id="shareGateTitle">Share JokStream to continue</h2>
-      <p>This channel is marked as exclusive in its channel metadata. Tap below to open WhatsApp, then return to this tab. The site can detect the click and return, but cannot verify that a message was sent.</p>
-      <button id="shareGateButton" class="button button-whatsapp full-width" type="button">Open WhatsApp to share</button>
-      <p id="shareGateStatus" class="modal-note">Playback will not start until you return from WhatsApp.</p>
-    </div>
+  <div class="modal subtitle-modal" id="subtitleModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close="subtitles"></div>
+    <section class="subtitle-panel"><button class="modal-close" data-close="subtitles">×</button><span class="eyebrow">LANGUAGE & ACCESSIBILITY</span><h2>External subtitles</h2><p class="muted">Search OpenSubtitles and attach a subtitle track to the current player.</p><div class="subtitle-search-row"><input id="subtitleLanguage" class="channel-search" value="en,ar" placeholder="Language codes, e.g. en,ar"><button id="subtitleSearchButton" class="button button-primary">Search</button></div><div id="subtitleResults" class="subtitle-results"><p class="muted">Choose your preferred languages and search for available subtitles.</p></div><p class="subtitle-footnote">Built-in VidSrc subtitles remain available inside the player settings.</p></section>
   </div>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <div id="socialToastRegion" class="toast-region" aria-live="polite"></div>
+  <nav class="mobile-nav" aria-label="Mobile navigation"><button data-route="home" class="active"><span>⌂</span>Home</button><button data-route="live"><span>◉</span>Live</button><button data-route="movies"><span>▣</span>Movies</button><button data-route="series"><span>▤</span>Series</button><button data-route="mylist"><span>＋</span>My List</button></nav>
 
-
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/p2p-media-loader-hlsjs@4.0.0/dist/p2p-media-loader-hlsjs.iife.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
