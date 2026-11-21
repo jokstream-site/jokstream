@@ -96,8 +96,8 @@ async function resolveProviderItem(entry,type){
  return {...details,id:Number(id),media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added};
 }
 async function loadBrowse(reset=false){
+ if(reset){state.browseLoading=false;$("browseGrid").replaceChildren();state.browsePage=1;state.browseRequest=(state.browseRequest||0)+1;}
  if(state.browseLoading)return;
- if(reset){$("browseGrid").replaceChildren();state.browsePage=1;state.browseRequest=(state.browseRequest||0)+1;}
  const request=state.browseRequest||0,type=state.browseType,page=state.browsePage;
  state.browseLoading=true;$("sortSelect").disabled=true;$("sortSelect").innerHTML='<option>Recently added · VidSrc catalogue</option>';$("browseCount").textContent="Connecting to VidSrc catalogue…";$("loadMoreTitles").hidden=true;
  try{
@@ -167,7 +167,7 @@ async function renderMyList(){
 function closeModal(id){$(id).classList.remove("open");$(id).setAttribute("aria-hidden","true");}
 function progressKey(type,id,season,episode){return "jokstream_progress:"+type+":"+id+(type==="tv"?":"+season+":"+episode:"");}
 function buildEmbedUrl(item,type,season,episode){
-  const url=new URL(type==="tv"?"/embed/tv/"+item.id+(season?"/"+season+"/"+episode:""):"/embed/movie/"+item.id,VIDSRC);
+  const mediaId=item.id||item.imdb_id;const url=new URL(type==="tv"?"/embed/tv/"+mediaId+(season?"/"+season+"/"+episode:""):"/embed/movie/"+mediaId,VIDSRC);
   url.searchParams.set("ds_lang","en,ar");
   if(type==="tv"&&!season)url.searchParams.set("autonext","1");
   const saved=readStore(progressKey(type,item.id,season,episode),null);
