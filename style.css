@@ -40,5 +40,5 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 @media(max-width:390px){.details-actions{grid-template-columns:1fr}.details-actions #detailsPlay{grid-column:auto}.details-body{padding-left:14px;padding-right:14px}}
 
-/* Activate the click shield only after VidSrc reports playback; remote controls remain outside the frame. */
+/* Automatic click protection sits over the cross-origin player; remote controls stay outside the iframe. */
 .player-shield{position:absolute;inset:0;z-index:5;background:transparent;cursor:default;touch-action:pan-y}
