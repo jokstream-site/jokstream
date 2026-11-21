@@ -10,7 +10,7 @@ const state = {
   genre: "", current: null, currentType: "movie", currentEpisode: null, currentDetails: null,
   liveChannels: [], liveRendered: 0, liveCategories: [], liveCategory: "", liveSearch: "", liveEngine: null,
   subtitleContext: null, selectedSubtitle: null, progress: {}, myList: readStore("jokstream_mylist", []),
-  lastResults: [], searchQuery: "", currentRate: 1
+  lastResults: [], searchQuery: "", currentRate: 1, playerShieldEnabled: false
 };
 function readStore(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; } }
 function writeStore(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
@@ -182,6 +182,7 @@ function playVOD(item,type="movie",season=null,episode=null){
   $("playerTitle").textContent=titleOf(item)+(type==="tv"&&season?" · S"+season+" E"+episode:"");
   $("playerState").textContent="LOADING";$("embedPlaceholder").hidden=true;
   $("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());
+  state.playerShieldEnabled=false;updatePlayerShieldButton();
   const frame=document.createElement("iframe");frame.id="vidFrame";frame.title="JOKSTREAM video player";frame.src=buildEmbedUrl(item,type,season,episode);
   frame.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";frame.allowFullscreen=true;frame.referrerPolicy="strict-origin-when-cross-origin";frame.loading="eager";
   frame.addEventListener("load",()=>{$("playerState").textContent="TAP PLAY INSIDE PLAYER";});
@@ -190,12 +191,24 @@ function playVOD(item,type="movie",season=null,episode=null){
   $("playerProgress").textContent="Progress is stored on this device when playback events are received.";
   $("playbackRate").textContent=state.currentRate+"×";
 }
-function activatePlayerShield(){
- const stage=$("embedStage");if(!stage||stage.querySelector(".player-shield"))return;
- const shield=document.createElement("div");shield.className="player-shield";shield.setAttribute("aria-label","Player click protection enabled");
- shield.title="Player protection is active. Use the remote controls below.";
- stage.append(shield);
+function updatePlayerShieldButton(){
+ const button=$("togglePlayerShield");if(!button)return;
+ button.textContent=state.playerShieldEnabled?"Click shield: ON":"Click shield: OFF";
+ button.setAttribute("aria-pressed",String(state.playerShieldEnabled));
+ button.title=state.playerShieldEnabled?"Disable the transparent layer and restore clicks inside the player":"Enable the transparent layer to test blocking clicks inside the player";
 }
+function setPlayerShield(enabled){
+ const stage=$("embedStage");if(!stage)return;
+ const shield=stage.querySelector(".player-shield");
+ if(enabled&&!shield){
+  const layer=document.createElement("div");layer.className="player-shield";layer.setAttribute("aria-label","Transparent click shield enabled");
+  layer.title="Transparent test layer is active. Use the external controls below.";
+  stage.append(layer);
+ }else if(!enabled&&shield){shield.remove();}
+ state.playerShieldEnabled=Boolean(enabled);updatePlayerShieldButton();
+}
+function activatePlayerShield(){setPlayerShield(true);}
+function togglePlayerShield(){setPlayerShield(!state.playerShieldEnabled);}
 function sendPlayerCommand(action,value){
   const frame=$("embedStage").querySelector("iframe");if(!frame?.contentWindow){toast("The player is not ready yet.",true);return;}
   const message={player:true,action};if(value!==undefined)message.value=value;
@@ -321,7 +334,7 @@ function setupEvents(){
   $("channelSearch").oninput=e=>{state.liveSearch=e.target.value;renderChannels();};
   $("liveFullscreen").onclick=()=>{const v=$("liveVideo");if(v.requestFullscreen)v.requestFullscreen();};
   document.querySelectorAll("[data-command]").forEach(b=>b.onclick=()=>{const a=b.dataset.command;sendPlayerCommand(a);if(a==="rate+"||a==="rate-"){state.currentRate=Math.max(.25,Math.min(4,state.currentRate+(a==="rate+"?.25:-.25)));$("playbackRate").textContent=state.currentRate.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")+"×";}});
-  $("openSubtitles").onclick=openSubtitles;$("subtitleSearchButton").onclick=searchSubtitles;
+  $("openSubtitles").onclick=openSubtitles;$("togglePlayerShield").onclick=togglePlayerShield;updatePlayerShieldButton();$("subtitleSearchButton").onclick=searchSubtitles;
   $("detailsModal").addEventListener("click",e=>{if(e.target.id==="detailsModal")closeModal("detailsModal");});
   $("playerModal").addEventListener("click",e=>{if(e.target.id==="playerModal"){closeModal("playerModal");$("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());}});
   document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal("detailsModal");closeModal("subtitleModal");if($("playerModal").classList.contains("open")){closeModal("playerModal");$("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());}}});
