@@ -63,3 +63,8 @@ The Worker reads the public GitHub raw files at request time, so updates committ
 ## Rights and availability
 
 Use only live streams and video sources you are authorized to access and distribute. TMDB provides discovery metadata and artwork; VidSrc availability is controlled by the third-party provider and is not guaranteed by JOKSTREAM. No client-side overlay can guarantee suppression of all third-party popups.
+
+
+## Detailed Arabic documentation
+
+The full maintenance and recovery guide is available in [`docs/README-AR.md`](docs/README-AR.md). It covers architecture, live TV, movies and series, VidSrc playback, subtitle behavior, configuration boundaries, deployment checks, and rollback to the known-good backup branch.
