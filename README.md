@@ -6,7 +6,8 @@ A responsive English-language streaming interface that brings Live TV, movies an
 
 - **Frontend:** Static HTML, CSS and JavaScript in the repository root.
 - **Live TV:** Cloudflare Worker at `https://jokstream-api.abdonarjah.workers.dev`.
-- **Movie and series discovery:** TMDB API through the JOKFLIX Cloudflare Worker at `https://jokflix.abdonarjah.workers.dev`.
+- **Movie and series catalogue:** VidSrc latest-content feeds through the same-origin `/api/vidsrc-catalog` route on the JOKSTREAM site Worker (5-minute edge cache).
+- **Movie and series metadata:** TMDB API through the JOKFLIX Cloudflare Worker at `https://jokflix.abdonarjah.workers.dev`.
 - **Playback:** VidSrc embeds using TMDB IDs.
 - **External subtitles:** OpenSubtitles endpoints exposed by the JOKSTREAM API Worker.
 
@@ -51,11 +52,13 @@ The Worker reads the public GitHub raw files at request time, so updates committ
 
 ## Release checks
 
-1. Open the JOKFLIX Worker `/health` endpoint and confirm `tmdbConfigured: true`.
-2. Open `/api/trending/movie/week?language=en-US` and confirm a TMDB `results` array is returned.
-3. Open the JOKSTREAM API `/health` endpoint and confirm the database and cache are connected.
-4. Open `/api/catalog?kind=live&page=1&limit=100` and confirm the channel list is returned.
-5. Test a live stream, a movie, a TV episode, built-in subtitles, and an external subtitle track in the browsers you intend to support.
+1. Open the JOKSTREAM site `/__asset-check` endpoint and confirm release `jokstream-catalog-v5`.
+2. Open `/api/vidsrc-catalog?type=movie&page=1` and `/api/vidsrc-catalog?type=tv&page=1`; confirm each returns a `result` array and `pages` count.
+3. Open the JOKFLIX Worker `/health` endpoint and confirm `tmdbConfigured: true`.
+4. Open `/api/trending/movie/week?language=en-US` and confirm a TMDB `results` array is returned.
+5. Open the JOKSTREAM API `/health` endpoint and confirm the database and cache are connected.
+6. Open `/api/catalog?kind=live&page=1&limit=100` and confirm the channel list is returned.
+7. Test a live stream, a movie, a TV episode, built-in subtitles, and an external subtitle track in the browsers you intend to support.
 
 ## Rights and availability
 
