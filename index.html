@@ -11,7 +11,7 @@
   <title>JOKSTREAM — Live TV, Movies & Series</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=20261121-4">
+  <link rel="stylesheet" href="./style.css?v=20261121-neon1">
 </head>
 <body>
   <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
@@ -56,7 +56,7 @@
       </section>
 
       <div id="homeRows" class="content-rows">
-        <section class="shelf"><div class="section-heading"><div><span class="eyebrow">CURATED FOR YOU</span><h2>Trending Movies</h2></div><button class="text-link" data-route="movies">View all ↗</button></div><div class="poster-row" id="trendingMovies"><div class="skeleton-row"></div></div></section>
+        <section class="shelf"><div class="section-heading"><div><span class="eyebrow">CURATED FOR YOU</span><h2>Trending Movies</h2></div><button class="text-link" data-route="movies">Show More ↗</button></div><div class="poster-row" id="trendingMovies"><div class="skeleton-row"></div></div></section>
         <section class="shelf"><div class="section-heading"><div><span class="eyebrow">BINGE-WORTHY</span><h2>Popular Series</h2></div><button class="text-link" data-route="series">View all ↗</button></div><div class="poster-row" id="popularSeries"><div class="skeleton-row"></div></div></section>
         <section class="shelf"><div class="section-heading"><div><span class="eyebrow">THE CRITICS' CHOICE</span><h2>Top Rated Movies</h2></div><button class="text-link" data-route="movies">View all ↗</button></div><div class="poster-row" id="topMovies"><div class="skeleton-row"></div></div></section>
         <section class="shelf"><div class="section-heading"><div><span class="eyebrow">NEW WORLDS TO DISCOVER</span><h2>Trending Series</h2></div><button class="text-link" data-route="series">View all ↗</button></div><div class="poster-row" id="trendingSeries"><div class="skeleton-row"></div></div></section>
@@ -106,7 +106,7 @@
     <div class="modal-backdrop" data-close="details"></div>
     <article class="details-panel">
       <button class="modal-close" data-close="details" aria-label="Close details">×</button>
-      <div class="details-backdrop" id="detailsBackdrop"></div><div class="details-gradient"></div>
+      <div class="details-backdrop" id="detailsBackdrop"></div><div class="details-trailer-frame" id="detailsTrailerFrame" hidden></div><div class="details-gradient"></div>
       <div class="details-topline"><span class="eyebrow" id="detailsType">JOKSTREAM LIBRARY</span><div class="details-copy"><h2 id="detailsTitle"></h2><div id="detailsMeta" class="details-meta"></div><p id="detailsOverview"></p><div class="details-actions"><button id="detailsPlay" class="button button-primary">▶ Watch now</button><button id="detailsList" class="button button-glass">＋ My List</button><button id="detailsTrailer" class="button button-glass" hidden>▷ Trailer</button></div></div></div>
       <div class="details-body"><div class="details-columns"><section><h3>About this title</h3><p id="detailsTagline" class="muted"></p><div id="detailsFacts" class="facts-grid"></div><h3>Cast</h3><div id="detailsCast" class="cast-list"></div></section><section id="seasonsPanel" hidden><div class="section-heading"><div><span class="eyebrow">CONTINUE THE STORY</span><h3>Seasons & Episodes</h3></div><select id="seasonSelect" class="select-control"></select></div><div id="episodeList" class="episode-list"></div></section></div><section class="similar-section"><h3>You may also like</h3><div id="similarRow" class="poster-row"></div></section></div>
     </article>
@@ -142,6 +142,6 @@
   <nav class="mobile-nav" aria-label="Mobile navigation"><button data-route="home" class="active"><span>⌂</span>Home</button><button data-route="live"><span>◉</span>Live</button><button data-route="movies"><span>▣</span>Movies</button><button data-route="series"><span>▤</span>Series</button><button data-route="mylist"><span>＋</span>My List</button></nav>
 
   <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
-  <script src="./app.js?v=20261121-14"></script>
+  <script src="./app.js?v=20261121-neon1"></script>
 </body>
 </html>
