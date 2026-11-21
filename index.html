@@ -135,13 +135,13 @@
 
   <div class="modal subtitle-modal" id="subtitleModal" aria-hidden="true">
     <div class="modal-backdrop" data-close="subtitles"></div>
-    <section class="subtitle-panel"><button class="modal-close" data-close="subtitles">×</button><span class="eyebrow">LANGUAGE & ACCESSIBILITY</span><h2>External subtitles</h2><p class="muted">Search OpenSubtitles and attach a subtitle track to the current player.</p><div class="subtitle-search-row"><input id="subtitleLanguage" class="channel-search" value="en,ar" placeholder="Language codes, e.g. en,ar"><button id="subtitleSearchButton" class="button button-primary">Search</button></div><div id="subtitleResults" class="subtitle-results"><p class="muted">Choose your preferred languages and search for available subtitles.</p></div><p class="subtitle-footnote">Built-in VidSrc subtitles remain available inside the player settings.</p></section>
+    <section class="subtitle-panel"><button class="modal-close" data-close="subtitles">×</button><span class="eyebrow">LANGUAGE & ACCESSIBILITY</span><h2>External subtitles</h2><p class="muted">Set the player subtitle priority (Arabic, Spanish, French) or search external subtitle files.</p><div class="subtitle-search-row"><input id="subtitleLanguage" class="channel-search" value="ar,es,fr" placeholder="Priority: ar,es,fr"><button id="applySubtitlePrefs" class="button button-primary">Apply languages</button><button id="subtitleSearchButton" class="button">Search external</button></div><div id="subtitleResults" class="subtitle-results"><p class="muted">Choose your preferred languages and search for available subtitles.</p></div><p class="subtitle-footnote">Built-in VidSrc subtitles remain available inside the player settings.</p></section>
   </div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
   <nav class="mobile-nav" aria-label="Mobile navigation"><button data-route="home" class="active"><span>⌂</span>Home</button><button data-route="live"><span>◉</span>Live</button><button data-route="movies"><span>▣</span>Movies</button><button data-route="series"><span>▤</span>Series</button><button data-route="mylist"><span>＋</span>My List</button></nav>
 
   <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
-  <script src="./app.js?v=20261121-13"></script>
+  <script src="./app.js?v=20261121-14"></script>
 </body>
 </html>
