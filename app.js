@@ -79,10 +79,22 @@ function buildGenres(){
   staticGenres.forEach(([id,label])=>{const b=document.createElement("button");b.className="genre-pill";b.textContent=label;b.onclick=()=>{state.genre=String(id);host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));state.browsePage=1;loadBrowse(true);};host.append(b);});
 }
 async function providerCatalogPage(type,page=1){
- const url=new URL("/api/vidsrc-catalog",location.origin);url.searchParams.set("type",type);url.searchParams.set("page",String(page));
- const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(18000)});
- if(!r.ok)throw new Error("Catalogue request failed ("+r.status+")");
- const d=await r.json();if(!Array.isArray(d.result))throw new Error("Invalid catalogue response");return d;
+ const endpoint=type==="tv"?"tvshows":"movies";
+ const hosts=["https://vidsrc.sh","https://vidsrc2.ru","https://vidsrc.ir"];
+ const failures=[];
+ for(const host of hosts){
+  const url=host+"/"+endpoint+"/latest/page-"+page+".json";
+  try{
+   const r=await fetch(url,{method:"GET",mode:"cors",credentials:"omit",headers:{Accept:"application/json"},cache:"no-store",referrerPolicy:"strict-origin-when-cross-origin",signal:AbortSignal.timeout(12000)});
+   if(!r.ok){failures.push(host+" ("+r.status+")");continue;}
+   const d=await r.json();
+   if(!Array.isArray(d.result)){failures.push(host+" (invalid catalogue response)");continue;}
+   return d;
+  }catch(e){
+   failures.push(host+" ("+(e&&e.name==="TimeoutError"?"timeout":"network/CORS error")+")");
+  }
+ }
+ throw new Error("VidSrc catalogue unavailable from this browser. "+failures.join("; "));
 }
 function providerFallback(entry,type){
  const title=String(entry.title||"").replace(/\\s+\\d{4}\\s*$/,"").trim()||"Untitled";
