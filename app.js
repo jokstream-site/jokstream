@@ -180,7 +180,7 @@ async function renderMyList(){
 function closeModal(id){$(id).classList.remove("open");$(id).setAttribute("aria-hidden","true");}
 function progressKey(type,id,season,episode){return "jokstream_progress:"+type+":"+id+(type==="tv"?":"+season+":"+episode:"");}
 function buildEmbedUrl(item,type,season,episode){
-  const mediaId=item.id||item.imdb_id;const url=new URL(type==="tv"?"/embed/tv/"+mediaId+(season?"/"+season+"/"+episode:""):"/embed/movie/"+mediaId,VIDSRC);
+  const mediaId=item.imdb_id||item.id;const url=new URL(type==="tv"?"/embed/tv/"+mediaId+(season?"/"+season+"/"+episode:""):"/embed/movie/"+mediaId,VIDSRC);
   url.searchParams.set("ds_lang","en,ar");
   if(type==="tv"&&!season)url.searchParams.set("autonext","1");
   const saved=readStore(progressKey(type,item.id,season,episode),null);
