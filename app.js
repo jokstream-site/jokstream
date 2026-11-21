@@ -78,27 +78,50 @@ function buildGenres(){
   staticGenres.forEach(([id,label])=>{const b=document.createElement("button");b.className="genre-pill";b.textContent=label;b.onclick=()=>{state.genre=String(id);host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));state.browsePage=1;loadBrowse(true);};host.append(b);});
 }
 async function providerCatalogPage(type,page=1){
- const endpoint=type==="tv"?"tvshows":"movies",r=await fetch("https://vidsrc.sh/"+endpoint+"/latest/page-"+page+".json",{headers:{Accept:"application/json"}});
- if(!r.ok)throw new Error("VidSrc catalogue request failed ("+r.status+")");const d=await r.json();if(!Array.isArray(d.result))throw new Error("Invalid VidSrc catalogue response");return d;
+ const url=new URL("/api/vidsrc-catalog",location.origin);url.searchParams.set("type",type);url.searchParams.set("page",String(page));
+ const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(18000)});
+ if(!r.ok)throw new Error("Catalogue request failed ("+r.status+")");
+ const d=await r.json();if(!Array.isArray(d.result))throw new Error("Invalid catalogue response");return d;
+}
+function providerFallback(entry,type){
+ const title=String(entry.title||"").replace(/\\s+\\d{4}\\s*$/,"").trim()||"Untitled";
+ const id=entry.tmdb_id?Number(entry.tmdb_id):entry.imdb_id;
+ return {id,title,name:type==="tv"?title:undefined,media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added,overview:"Details are loading from TMDB.",poster_path:null,backdrop_path:null,vote_average:0};
 }
 async function resolveProviderItem(entry,type){
  let id=entry.tmdb_id?String(entry.tmdb_id):"";
- if(!id&&entry.imdb_id){try{const f=await tmdb("find/"+entry.imdb_id,{external_source:"imdb_id"});id=String(((type==="tv"?f.tv_results:f.movie_results)||[])[0]?.id||"");}catch{}}
- if(!id)return null;try{return {...await tmdb(type+"/"+id),id:Number(id),media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added};}catch{return null;}
-}
-async function resolveProviderBatch(entries,type){
- const out=[];for(let i=0;i<entries.length;i+=8){out.push(...(await Promise.all(entries.slice(i,i+8).map(x=>resolveProviderItem(x,type)))).filter(Boolean));}return out;
+ if(!id&&entry.imdb_id){const f=await tmdb("find/"+entry.imdb_id,{external_source:"imdb_id"});id=String(((type==="tv"?f.tv_results:f.movie_results)||[])[0]?.id||"");}
+ if(!id)return providerFallback(entry,type);
+ const details=await tmdb(type+"/"+id);
+ return {...details,id:Number(id),media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added};
 }
 async function loadBrowse(reset=false){
- if(reset){$("browseGrid").replaceChildren();state.browsePage=1;}
- const type=state.browseType;$("sortSelect").disabled=true;$("sortSelect").innerHTML='<option>Recently added · VidSrc catalogue</option>';$("browseCount").textContent="Loading provider catalogue…";
+ if(state.browseLoading)return;
+ if(reset){$("browseGrid").replaceChildren();state.browsePage=1;state.browseRequest=(state.browseRequest||0)+1;}
+ const request=state.browseRequest||0,type=state.browseType,page=state.browsePage;
+ state.browseLoading=true;$("sortSelect").disabled=true;$("sortSelect").innerHTML='<option>Recently added · VidSrc catalogue</option>';$("browseCount").textContent="Connecting to VidSrc catalogue…";$("loadMoreTitles").hidden=true;
  try{
-  const d=await providerCatalogPage(type,state.browsePage),items=await resolveProviderBatch(d.result,type);
-  if(reset)$("browseGrid").replaceChildren();items.forEach(x=>$("browseGrid").append(card(x,type)));
-  $("browseCount").textContent="VidSrc catalogue · Page "+state.browsePage+" of "+Number(d.pages||1).toLocaleString()+" · 50 entries per page";
-  $("loadMoreTitles").hidden=!d.pages||state.browsePage>=d.pages;
-  if(!items.length)$("browseGrid").innerHTML='<div class="empty-state">No titles on this page matched TMDB metadata. Try the next page.</div>';
- }catch(e){$("browseCount").textContent="Provider catalogue unavailable";$("browseGrid").innerHTML='<div class="empty-state">Could not load VidSrc catalogue: '+escapeHtml(e.message)+'</div>';$("loadMoreTitles").hidden=true;toast(e.message,true);}
+  const d=await providerCatalogPage(type,page);if(request!==state.browseRequest)return;
+  const entries=d.result||[];if(!entries.length){$("browseCount").textContent="No titles found in this catalogue page.";$("browseGrid").innerHTML='<div class="empty-state">No titles are available on this page.</div>';return;}
+  $("browseCount").textContent="VidSrc catalogue · "+entries.length+" titles · Enriching details…";
+  let shown=0,matched=0;
+  for(let i=0;i<entries.length;i+=8){
+   const batch=entries.slice(i,i+8);
+   const resolved=await Promise.all(batch.map(async entry=>{try{return await Promise.race([resolveProviderItem(entry,type),new Promise((_,reject)=>setTimeout(()=>reject(new Error("TMDB timeout")),12000))]);}catch{return providerFallback(entry,type);}}));
+   if(request!==state.browseRequest)return;
+   const valid=resolved.filter(Boolean),filtered=state.genre?valid.filter(x=>(x.genre_ids||[]).some(g=>String(g)===String(state.genre))):valid;
+   filtered.forEach(item=>$("browseGrid").append(card(item,type)));shown+=filtered.length;matched+=filtered.length;
+   $("browseCount").textContent="VidSrc catalogue · "+shown+" of "+entries.length+" titles loaded";
+  }
+  $("browseCount").textContent="VidSrc catalogue · Page "+page+" of "+Number(d.pages||1).toLocaleString()+" · "+matched+" titles";
+  $("loadMoreTitles").hidden=!d.pages||page>=d.pages;
+  if(!matched)$("browseGrid").innerHTML='<div class="empty-state">No titles matched this filter. Choose All or another genre.</div>';
+ }catch(e){
+  if(request!==state.browseRequest)return;
+  $("browseCount").textContent="Catalogue connection failed";
+  $("browseGrid").innerHTML='<div class="empty-state">Could not load VidSrc catalogue: '+escapeHtml(e.message)+' · Please retry.</div>';
+  $("loadMoreTitles").hidden=true;toast(e.message,true);
+ }finally{if(request===state.browseRequest)state.browseLoading=false;}
 }
 async function showDetails(item,type="movie"){
   state.current=item;state.currentType=type==="tv"||type==="series"?"tv":"movie";state.currentEpisode=null;state.selectedSubtitle=null;
@@ -159,12 +182,18 @@ function playVOD(item,type="movie",season=null,episode=null){
   $("playerState").textContent="LOADING";$("embedPlaceholder").hidden=true;
   $("embedStage").querySelectorAll("iframe").forEach(x=>x.remove());
   const frame=document.createElement("iframe");frame.id="vidFrame";frame.title="JOKSTREAM video player";frame.src=buildEmbedUrl(item,type,season,episode);
-  frame.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";frame.allowFullscreen=true;frame.referrerPolicy="strict-origin-when-cross-origin";
-  $("embedPlaceholder").hidden=true;
-  frame.addEventListener("load",()=>{$("playerState").textContent="PLAYER LOADED";});
+  frame.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";frame.allowFullscreen=true;frame.referrerPolicy="strict-origin-when-cross-origin";frame.loading="eager";
+  frame.addEventListener("load",()=>{$("playerState").textContent="TAP PLAY INSIDE PLAYER";});
+  frame.addEventListener("error",()=>{$("playerState").textContent="PLAYER FAILED TO LOAD";});
   $("embedStage").append(frame);
   $("playerProgress").textContent="Progress is stored on this device when playback events are received.";
   $("playbackRate").textContent=state.currentRate+"×";
+}
+function activatePlayerShield(){
+ const stage=$("embedStage");if(!stage||stage.querySelector(".player-shield"))return;
+ const shield=document.createElement("div");shield.className="player-shield";shield.setAttribute("aria-label","Player click protection enabled");
+ shield.title="Player protection is active. Use the remote controls below.";
+ stage.append(shield);
 }
 function sendPlayerCommand(action,value){
   const frame=$("embedStage").querySelector("iframe");if(!frame?.contentWindow){toast("The player is not ready yet.",true);return;}
@@ -176,7 +205,7 @@ window.addEventListener("message",event=>{
   let payload=event.data;if(typeof payload==="string"){try{payload=JSON.parse(payload)}catch{return}}
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
-  if(status)$("playerState").textContent=status.toUpperCase();
+  if(status){$("playerState").textContent=status.toUpperCase();if(status==="playing")activatePlayerShield();}
   const progress=Number(data.player_progress),duration=Number(data.player_duration);
   if(Number.isFinite(progress)&&progress>=0&&state.current){const p={time:Math.floor(progress),duration:Number.isFinite(duration)?Math.floor(duration):0,updatedAt:Date.now()};const key=progressKey(state.currentType,state.current.id,info.season||state.currentEpisode?.season,info.episode||state.currentEpisode?.episode);localStorage.setItem(key,JSON.stringify(p));$("playerProgress").textContent="Resume point saved · "+formatTime(progress)+(duration>0?" / "+formatTime(duration):"");}
   if(status==="completed"&&state.currentType==="tv"&&state.currentEpisode)toast("Episode completed. Choose the next episode when you're ready.");
