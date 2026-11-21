@@ -132,6 +132,8 @@ function buildEmbedUrl(item,type,season,episode){
   const url=new URL(type==="tv"?"/embed/tv/"+item.id+(season?"/"+season+"/"+episode:""):"/embed/movie/"+item.id,VIDSRC);
   url.searchParams.set("ds_lang","en,ar");
   if(type==="tv"&&!season)url.searchParams.set("autonext","1");
+  const saved=readStore(progressKey(type,item.id,season,episode),null);
+  if(saved&&Number(saved.time)>20&&(!saved.duration||Number(saved.duration)-Number(saved.time)>45))url.searchParams.set("startAt",String(Math.floor(saved.time)));
   if(state.selectedSubtitle){url.searchParams.set("sub_url",state.selectedSubtitle.url);url.searchParams.set("sub_label",state.selectedSubtitle.label);url.searchParams.set("sub_lang",state.selectedSubtitle.language);}
   return url.toString();
 }
@@ -278,7 +280,6 @@ function setupEvents(){
   $("myListButton").onclick=()=>showView("mylist");
   $("channelSearch").oninput=e=>{state.liveSearch=e.target.value;renderChannels();};
   $("liveFullscreen").onclick=()=>{const v=$("liveVideo");if(v.requestFullscreen)v.requestFullscreen();};
-  $("remote-controls");
   document.querySelectorAll("[data-command]").forEach(b=>b.onclick=()=>{const a=b.dataset.command;sendPlayerCommand(a);if(a==="rate+"||a==="rate-"){state.currentRate=Math.max(.25,Math.min(4,state.currentRate+(a==="rate+"?.25:-.25)));$("playbackRate").textContent=state.currentRate.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")+"×";}});
   $("openSubtitles").onclick=openSubtitles;$("subtitleSearchButton").onclick=searchSubtitles;
   $("detailsModal").addEventListener("click",e=>{if(e.target.id==="detailsModal")closeModal("detailsModal");});
