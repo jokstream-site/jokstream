@@ -86,7 +86,7 @@ async function loadBrowse(reset=false){
   catch(e){toast(e.message,true);$("browseGrid").innerHTML='<div class="empty-state">The catalogue could not be loaded. Please try again.</div>';}
 }
 async function showDetails(item,type="movie"){
-  state.current=item;state.currentType=type==="tv"||type==="series"?"tv":"movie";state.currentEpisode=null;
+  state.current=item;state.currentType=type==="tv"||type==="series"?"tv":"movie";state.currentEpisode=null;state.selectedSubtitle=null;
   $("detailsModal").classList.add("open");$("detailsModal").setAttribute("aria-hidden","false");
   $("detailsTitle").textContent=titleOf(item);$("detailsOverview").textContent=item.overview||"Loading title details…";
   $("detailsBackdrop").style.backgroundImage=item.backdrop_path?"url('"+image(item.backdrop_path,"w1280")+"')":"none";
@@ -109,7 +109,7 @@ async function showDetails(item,type="movie"){
   }catch(e){$("detailsOverview").textContent=e.message;}
   $("detailsList").textContent=state.myList.some(x=>x.id===item.id&&x.type===state.currentType)?"✓ In My List":"＋ My List";
   $("detailsList").onclick=()=>toggleMyList(item,state.currentType);
-  $("detailsPlay").onclick=()=>{if(state.currentType==="tv"){const s=Number($("seasonSelect").value||1);const firstEpisode=Number($("episodeList").querySelector("[data-episode]")?.dataset.episode||1);playVOD(d||item,"tv",s,firstEpisode);}else playVOD(state.currentDetails||item,"movie");};
+  $("detailsPlay").onclick=()=>{if(state.currentType==="tv"){const s=Number($("seasonSelect").value||1);const firstEpisode=Number($("episodeList").querySelector("[data-episode]")?.dataset.episode||1);playVOD(state.currentDetails||item,"tv",s,firstEpisode);}else playVOD(state.currentDetails||item,"movie");};
 }
 async function loadEpisodes(id,season){
   $("episodeList").innerHTML='<p class="muted">Loading episodes…</p>';
@@ -136,7 +136,7 @@ function buildEmbedUrl(item,type,season,episode){
   return url.toString();
 }
 function playVOD(item,type="movie",season=null,episode=null){
-  if(!item)return;state.current=item;state.currentType=type;state.currentEpisode=type==="tv"?{season,episode}:null;state.selectedSubtitle=null;
+  if(!item)return;state.current=item;state.currentType=type;state.currentEpisode=type==="tv"?{season,episode}:null;
   closeModal("detailsModal");$("playerModal").classList.add("open");$("playerModal").setAttribute("aria-hidden","false");
   $("playerTitle").textContent=titleOf(item)+(type==="tv"&&season?" · S"+season+" E"+episode:"");
   $("playerState").textContent="LOADING";$("embedPlaceholder").hidden=false;$("embedPlaceholder").querySelector("b").textContent="Preparing your stream";
@@ -211,8 +211,8 @@ async function loadLive(){
 }
 function renderCategories(){
   const host=$("channelCategories");host.replaceChildren();
-  const all=document.createElement("button");all.className="category-pill active";all.textContent="All channels";all.onclick=()=>{state.liveCategory="";renderCategories();renderChannels();};host.append(all);
-  state.liveCategories.forEach(cat=>{const b=document.createElement("button");b.className="category-pill";b.textContent=cat.category_name||cat.name||"Category";b.onclick=()=>{state.liveCategory=String(cat.category_id??cat.id??"");renderCategories();renderChannels();};b.classList.toggle("active",b.dataset.category===state.liveCategory);b.dataset.category=state.liveCategory;host.append(b);});
+  const all=document.createElement("button");all.className="category-pill";all.dataset.category="";all.textContent="All channels";all.onclick=()=>{state.liveCategory="";renderCategories();renderChannels();};all.classList.toggle("active",!state.liveCategory);host.append(all);
+  state.liveCategories.forEach(cat=>{const id=String(cat.category_id??cat.id??"");const b=document.createElement("button");b.className="category-pill";b.dataset.category=id;b.textContent=cat.category_name||cat.name||"Category";b.onclick=()=>{state.liveCategory=id;renderCategories();renderChannels();};b.classList.toggle("active",id===state.liveCategory);host.append(b);});
 }
 function renderChannels(){
   const host=$("channelList"),q=state.liveSearch.toLowerCase();
@@ -256,13 +256,13 @@ async function runSearch(query){
 function setupPopupProtection(){
   const original=window.open;
   window.open=function(url,target,features){
-    try{const dest=new URL(url||"about:blank",location.href);if(dest.origin!==location.origin){console.info("JOKSTREAM blocked a page-level external popup");return null;}}
+    try{const dest=new URL(url||"about:blank",location.href);if(dest.origin!==location.origin&&!["https://www.youtube.com","https://youtube.com","https://youtu.be"].includes(dest.origin)){console.info("JOKSTREAM blocked a page-level external popup");return null;}}
     catch{return null;}
     return original.call(window,url,target,features);
   };
   document.addEventListener("click",event=>{
     const link=event.target.closest?.("a[target='_blank']");if(!link)return;
-    try{if(new URL(link.href,location.href).origin!==location.origin){event.preventDefault();event.stopImmediatePropagation();}}
+    try{if(new URL(link.href,location.href).origin!==location.origin&&!["https://www.youtube.com","https://youtube.com","https://youtu.be"].includes(new URL(link.href,location.href).origin)){event.preventDefault();event.stopImmediatePropagation();}}
     catch{event.preventDefault();event.stopImmediatePropagation();}
   },true);
 }
