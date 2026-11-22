@@ -11,7 +11,7 @@
   <title>JOKSTREAM — Live TV, Movies & Series</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=20261122-neon-redesign1">
+  <link rel="stylesheet" href="./style.css?v=20261122-button-icons2">
 </head>
 <body>
   <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
@@ -43,16 +43,16 @@
           <div class="hero-meta" id="heroMeta"></div>
           <div class="hero-actions">
             <button class="button button-primary" id="heroPlay">▶ <span>Explore now</span></button>
-            <button class="button button-glass" id="heroInfo">More info</button>
+            <button class="button button-glass" id="heroInfo"><span aria-hidden="true">ⓘ</span> More info</button>
           </div>
         </div>
         <div class="hero-index"><span>01</span><i></i><span>JOKSTREAM ORIGINAL EXPERIENCE</span></div>
       </section>
 
       <section class="quick-entry">
-        <button class="quick-card live-quick" data-route="live"><span class="quick-icon">◉</span><span><b>Live Television</b><small>Watch channels in real time</small></span><span class="quick-arrow">↗</span></button>
-        <button class="quick-card movie-quick" data-route="movies"><span class="quick-icon">▣</span><span><b>Movies</b><small>Explore the latest releases</small></span><span class="quick-arrow">↗</span></button>
-        <button class="quick-card series-quick" data-route="series"><span class="quick-icon">▤</span><span><b>TV Series</b><small>Find your next episode</small></span><span class="quick-arrow">↗</span></button>
+        <button class="quick-card live-quick" data-route="live"><span class="quick-icon" aria-hidden="true">📡</span><span><b>Live Television</b><small>Watch channels in real time</small></span><span class="quick-arrow">↗</span></button>
+        <button class="quick-card movie-quick" data-route="movies"><span class="quick-icon" aria-hidden="true">🎬</span><span><b>Movies</b><small>Explore the latest releases</small></span><span class="quick-arrow">↗</span></button>
+        <button class="quick-card series-quick" data-route="series"><span class="quick-icon" aria-hidden="true">📺</span><span><b>TV Series</b><small>Find your next episode</small></span><span class="quick-arrow">↗</span></button>
       </section>
 
       <div id="homeRows" class="content-rows">
@@ -140,7 +140,7 @@
   </div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <nav class="mobile-nav" aria-label="Mobile navigation"><button data-route="home" class="active"><span>⌂</span>Home</button><button data-route="live"><span>◉</span>Live</button><button data-route="movies"><span>▣</span>Movies</button><button data-route="series"><span>▤</span>Series</button><button data-route="mylist"><span>＋</span>My List</button></nav>
+  <nav class="mobile-nav" aria-label="Mobile navigation"><button data-route="home" class="active"><span aria-hidden="true">⌂</span>Home</button><button data-route="live"><span aria-hidden="true">◉</span>Live</button><button data-route="movies"><span aria-hidden="true">▱</span>Movies</button><button data-route="series"><span aria-hidden="true">▤</span>Series</button><button data-route="mylist"><span aria-hidden="true">♧</span>My List</button></nav>
 
   <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
   <script src="./app.js?v=20261122-vidsrc-catalogfix1"></script>
