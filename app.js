@@ -214,6 +214,8 @@ function playVOD(item,type="movie",season=null,episode=null){
 function setPlayerShield(enabled){
  const stage=$("embedStage");if(!stage)return;
  const existing=stage.querySelector(".player-shield");
+ const toggle=$("playerClickToggle");
+ if(toggle){toggle.textContent=enabled?"Allow player clicks":"Protect clicks";toggle.title=enabled?"Allow clicks inside VidSrc for verification":"Enable click protection over the player";toggle.setAttribute("aria-pressed",String(enabled));}
  if(enabled&&!existing){
   const layer=document.createElement("div");
   layer.className="player-shield";
@@ -240,7 +242,7 @@ window.addEventListener("message",event=>{
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
   if(status){$("playerState").textContent=status.toUpperCase();}
-  if(status==="playing")setPlayerShield(true);
+  // Keep VidSrc clickable so its own CAPTCHA and verification remain interactive.
   const progress=Number(data.player_progress),duration=Number(data.player_duration);
   if(Number.isFinite(progress)&&progress>=0&&state.current){const p={time:Math.floor(progress),duration:Number.isFinite(duration)?Math.floor(duration):0,updatedAt:Date.now()};const key=progressKey(state.currentType,state.current.id,info.season||state.currentEpisode?.season,info.episode||state.currentEpisode?.episode);localStorage.setItem(key,JSON.stringify(p));$("playerProgress").textContent="Resume point saved · "+formatTime(progress)+(duration>0?" / "+formatTime(duration):"");}
   if(status==="completed"&&state.currentType==="tv"&&state.currentEpisode)toast("Episode completed. Choose the next episode when you're ready.");
@@ -355,6 +357,7 @@ function setupEvents(){
   $("myListButton").onclick=()=>showView("mylist");
   $("channelSearch").oninput=e=>{state.liveSearch=e.target.value;renderChannels();};
   $("liveFullscreen").onclick=()=>{const v=$("liveVideo");if(v.requestFullscreen)v.requestFullscreen();};
+  $("playerClickToggle").onclick=()=>setPlayerShield(!$("embedStage").querySelector(".player-shield"));
   document.querySelectorAll("[data-command]").forEach(b=>b.onclick=()=>{const a=b.dataset.command;sendPlayerCommand(a);if(a==="rate+"||a==="rate-"){state.currentRate=Math.max(.25,Math.min(4,state.currentRate+(a==="rate+"?.25:-.25)));$("playbackRate").textContent=state.currentRate.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")+"×";}});
   $("openSubtitles").onclick=openSubtitles;$("subtitleSearchButton").onclick=searchSubtitles;$("applySubtitlePrefs").onclick=applySubtitlePreferences;
   $("detailsModal").addEventListener("click",e=>{if(e.target.id==="detailsModal")closeModal("detailsModal");});
