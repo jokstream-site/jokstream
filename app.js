@@ -18,7 +18,7 @@ function toast(message, error = false) { const el=document.createElement("div");
 function safe(value) { return String(value ?? "").replace(/[<>]/g,"").trim(); }
 function titleOf(item) { return item?.title || item?.name || "Untitled"; }
 function yearOf(item) { return String(item?.release_date || item?.first_air_date || "").slice(0,4); }
-function image(path,size="w500") { return path ? TMDB_IMAGE+size+path : ""; }
+function image(path,size="w500") { return path ? (/^https?:\\/\\//i.test(path)?path:TMDB_IMAGE+size+path) : ""; }
 function mediaType(item, fallback="movie") { return item?.media_type === "tv" || item?.first_air_date || fallback === "tv" ? "tv" : "movie"; }
 async function tmdb(path, params={}) {
   const url = new URL(JOKFLIX_API + "/api/" + path.replace(/^\/+/, ""));
@@ -129,15 +129,15 @@ async function loadBrowse(reset=false){
   let shown=0,matched=0;
   for(let i=0;i<entries.length;i+=8){
    const batch=entries.slice(i,i+8);
-   const resolved=await Promise.all(batch.map(async entry=>{try{return await Promise.race([resolveProviderItem(entry,type),new Promise((_,reject)=>setTimeout(()=>reject(new Error("TMDB timeout")),12000))]);}catch{return providerFallback(entry,type);}}));
+   const resolved=await Promise.all(batch.map(async entry=>{try{return await Promise.race([resolveProviderItem(entry,type),new Promise((_,reject)=>setTimeout(()=>reject(new Error("VidSrc info timeout")),12000))]);}catch{return null;}}));
    if(request!==state.browseRequest)return;
-   const valid=resolved.filter(Boolean),filtered=state.genre?valid.filter(x=>(x.genre_ids||[]).some(g=>String(g)===String(state.genre))):valid;
+   const filtered=resolved.filter(Boolean);
    filtered.forEach(item=>$("browseGrid").append(card(item,type)));shown+=filtered.length;matched+=filtered.length;
    $("browseCount").textContent="VidSrc catalogue · "+shown+" of "+entries.length+" titles loaded";
   }
   $("browseCount").textContent="VidSrc catalogue · Page "+page+" of "+Number(d.pages||1).toLocaleString()+" · "+matched+" titles loaded · 50 per page";
   $("loadMoreTitles").hidden=!d.pages||page>=d.pages;$("loadMoreTitles").textContent=page>=Number(d.pages||page)?"Catalogue complete":"Scroll to load the next 50";
-  if(!matched)$("browseGrid").innerHTML='<div class="empty-state">No titles matched this filter. Choose All or another genre.</div>';
+  if(!matched)$("browseGrid").innerHTML='<div class="empty-state">No playable titles were verified on this VidSrc page. Try the next page.</div>';
  }catch(e){
   if(request!==state.browseRequest)return;
   $("browseCount").textContent="Catalogue connection failed";
