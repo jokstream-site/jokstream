@@ -347,9 +347,14 @@ function renderSearchResults(items){
   items.filter(x=>["movie","tv"].includes(x.media_type)||x.title||x.name).forEach(x=>host.append(card(x,mediaType(x))));
 }
 async function runSearch(query){
-  const q=query.trim();if(q.length<2)return;state.searchQuery=q;showView("search");$("searchHeading").textContent="Results for “"+q+"”";
-  try{const d=await tmdb("search/multi",{query:q,page:1});renderSearchResults((d.results||[]).filter(x=>["movie","tv"].includes(x.media_type)&&x.poster_path));}
-  catch(e){$("searchGrid").innerHTML='<div class="empty-state">Search unavailable: '+escapeHtml(e.message)+'</div>';}
+  const q=query.trim();if(q.length<2)return;state.searchQuery=q;showView("search");$("searchHeading").textContent="VidSrc available results for “"+q+"”";
+  try{
+    const d=await tmdb("search/multi",{query:q,page:1});
+    const candidates=(d.results||[]).filter(x=>["movie","tv"].includes(x.media_type)).slice(0,24);
+    const verified=await Promise.all(candidates.map(async item=>{try{return await resolveProviderItem({tmdb_id:String(item.id),title:titleOf(item)},item.media_type==="tv"?"tv":"movie");}catch{return null;}}));
+    renderSearchResults(verified.filter(Boolean));
+    if(!verified.some(Boolean))$("searchGrid").innerHTML='<div class="empty-state">No matching title is currently listed as available on VidSrc.</div>';
+  }catch(e){$("searchGrid").innerHTML='<div class="empty-state">Search unavailable: '+escapeHtml(e.message)+'</div>';}
 }
 function setupPopupProtection(){
   const original=window.open;
