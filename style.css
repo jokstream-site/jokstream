@@ -560,3 +560,32 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
  .mobile-nav button span{font-size:24px!important}
 }
 @media(prefers-reduced-motion:reduce){.quick-card,.button,.poster-image,.poster-card:after{transition:none!important}}
+
+
+/* Browse genre rail — emoji-led, touch-friendly streaming filters */
+.genre-filters{
+ display:flex!important;flex-wrap:nowrap!important;gap:10px!important;
+ overflow-x:auto!important;overscroll-behavior-x:contain;scrollbar-width:none;
+ padding:7px 2px 13px!important;max-width:100%;-webkit-overflow-scrolling:touch;
+}
+.genre-filters::-webkit-scrollbar{display:none}
+.genre-pill{
+ flex:0 0 auto!important;min-height:43px!important;padding:10px 17px!important;
+ border:1px solid #9e60c45c!important;border-radius:999px!important;
+ background:linear-gradient(145deg,#20132f,#100b1b)!important;
+ color:#e2d2ef!important;font-size:12px!important;font-weight:750!important;
+ box-shadow:inset 0 1px #ffffff12,0 5px 14px #0004!important;
+ transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease!important;
+}
+.genre-pill:hover{transform:translateY(-2px)!important;border-color:#e17aff!important;box-shadow:0 0 17px #bd40ff55!important}
+.genre-pill.active{
+ color:#fff!important;border-color:#f0a0ff!important;
+ background:linear-gradient(110deg,#c52bf1,#6927db)!important;
+ box-shadow:0 0 0 1px #ffffff25 inset,0 0 18px #b52cff88,0 7px 18px #0006!important;
+}
+.genre-pill:focus-visible{outline:2px solid #f0a0ff!important;outline-offset:3px}
+@media(max-width:760px){
+ .filter-bar{gap:9px!important;margin-bottom:15px!important}
+ .genre-filters{margin-right:-13px;padding-right:13px!important;gap:8px!important}
+ .genre-pill{min-height:40px!important;padding:9px 14px!important;font-size:11px!important}
+}
