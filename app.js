@@ -188,6 +188,12 @@ function buildEmbedUrl(item,type,season,episode){
   const preferred=String($("subtitleLanguage")?.value||"ar,es,fr").toLowerCase().split(",").map(x=>x.trim()).filter(x=>/^[a-z]{2,3}$/.test(x));
   const subtitlePriority=[...new Set(preferred.length?preferred:["ar","es","fr"])].slice(0,3);
   url.searchParams.set("ds_lang",subtitlePriority.join(","));
+  // VidSrc loads custom subtitle files directly in the viewer; keep the embed itself direct.
+  if(state.selectedSubtitle?.url){
+    url.searchParams.set("sub_url",state.selectedSubtitle.url);
+    url.searchParams.set("sub_label",state.selectedSubtitle.label||"External subtitle");
+    url.searchParams.set("sub_lang",state.selectedSubtitle.language||"en");
+  }
   if(type==="tv")url.searchParams.set("autonext","1");
   return url.toString();
 }
@@ -217,12 +223,19 @@ function setPlayerShield(enabled){
  }else if(!enabled&&existing){existing.remove();}
 }
 function sendPlayerCommand(action,value){
-  const frame=$("embedStage").querySelector("iframe");if(!frame?.contentWindow){toast("The player is not ready yet.",true);return;}
+  const frame=$("embedStage").querySelector("iframe");
+  if(!frame?.contentWindow){toast("The player is not ready yet.",true);return;}
   const message={player:true,action};if(value!==undefined)message.value=value;
-  frame.contentWindow.postMessage(message,"*");
+  // Send commands only to the direct VidSrc iframe, never through a proxy or wildcard target.
+  let targetOrigin="https://vidsrc.sh";
+  try{targetOrigin=new URL(frame.src).origin;}catch{}
+  frame.contentWindow.postMessage(message,targetOrigin);
 }
 window.addEventListener("message",event=>{
-  let eventHost="";try{eventHost=new URL(event.origin).hostname.toLowerCase()}catch{return}if(!["vidsrc.sh"].includes(eventHost))return;
+  const activeFrame=$("embedStage")?.querySelector("iframe");
+  if(!activeFrame||event.source!==activeFrame.contentWindow)return;
+  let eventHost="";try{eventHost=new URL(event.origin).hostname.toLowerCase()}catch{return}
+  if(!["vidsrc.sh","vidsrc2.ru","vidsrc.ir"].includes(eventHost))return;
   let payload=event.data;if(typeof payload==="string"){try{payload=JSON.parse(payload)}catch{return}}
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
