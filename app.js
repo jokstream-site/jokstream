@@ -48,17 +48,27 @@ function card(item,type="movie") {
 }
 function fillRow(id,items,type) { const host=$(id);host.replaceChildren();const rows=(items||[]).filter(x=>x.poster_path).slice(0,18);if(!rows.length){host.innerHTML='<p class="muted">No titles available right now.</p>';return;}rows.forEach(x=>host.append(card(x,type))); }
 async function home() {
-  const jobs=[
-    ["trending/movie/week","trendingMovies","movie"],
-    ["tv/popular","popularSeries","tv"],
-    ["movie/top_rated","topMovies","movie"],
-    ["trending/tv/week","trendingSeries","tv"]
-  ];
-  await Promise.all(jobs.map(async([path,id,type])=>{try{const d=await tmdb(path);fillRow(id,d.results,type);}catch(e){$(id).innerHTML='<p class="muted">Unable to load this collection.</p>';console.warn(path,e);}}));
-  try {
-    const d=await tmdb("trending/movie/week");const hero=(d.results||[]).find(x=>x.backdrop_path)||d.results?.[0];
-    if(hero){$("heroBackdrop").style.backgroundImage="url('"+image(hero.backdrop_path,"original")+"')";$("heroTitle").innerHTML=escapeHtml(titleOf(hero)).replace(/\s+/g,"<br>");$("heroOverview").textContent=hero.overview||"Discover your next favourite story."; $("heroMeta").replaceChildren();[$("heroMeta")].forEach(()=>{});const bits=[yearOf(hero),Number(hero.vote_average||0).toFixed(1)+" ★",hero.original_language?.toUpperCase()].filter(Boolean);bits.forEach(v=>{const s=document.createElement("span");s.textContent=v;$("heroMeta").append(s);});$("heroPlay").onclick=()=>showDetails(hero,"movie");$("heroInfo").onclick=()=>showDetails(hero,"movie");}
-  } catch(e){console.warn("Hero unavailable",e);}
+  const shelves=[["movie","trendingMovies"],["tv","popularSeries"],["movie","topMovies"],["tv","trendingSeries"]];
+  await Promise.all(shelves.map(async([type,id])=>{
+    try{
+      const feed=await providerCatalogPage(type,1);
+      const entries=(feed.result||[]).slice(0,18);
+      const items=await Promise.all(entries.map(entry=>resolveProviderItem(entry,type).catch(()=>null)));
+      fillRow(id,items.filter(Boolean),type);
+    }catch(e){$(id).innerHTML='<p class="muted">VidSrc catalogue is temporarily unavailable.</p>';console.warn("VidSrc home shelf",type,e);}
+  }));
+  try{
+    const feed=await providerCatalogPage("movie",1);
+    const hero=await resolveProviderItem((feed.result||[])[0],"movie");
+    if(hero){
+      $("heroBackdrop").style.backgroundImage=hero.poster_path?"linear-gradient(90deg,#080b12e8,#080b1270),url('"+image(hero.poster_path)+"')":"";
+      $("heroTitle").textContent=titleOf(hero);
+      $("heroOverview").textContent="Available on VidSrc · "+(hero.vidsrc_quality||"Quality varies by source")+".";
+      $("heroMeta").replaceChildren();
+      [yearOf(hero),hero.vidsrc_quality||""].filter(Boolean).forEach(v=>{const span=document.createElement("span");span.textContent=v;$("heroMeta").append(span);});
+      $("heroPlay").onclick=()=>showDetails(hero,"movie");$("heroInfo").onclick=()=>showDetails(hero,"movie");
+    }
+  }catch(e){console.warn("VidSrc hero unavailable",e);}
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function showView(route) {
