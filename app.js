@@ -18,7 +18,7 @@ function toast(message, error = false) { const el=document.createElement("div");
 function safe(value) { return String(value ?? "").replace(/[<>]/g,"").trim(); }
 function titleOf(item) { return item?.title || item?.name || "Untitled"; }
 function yearOf(item) { return String(item?.release_date || item?.first_air_date || "").slice(0,4); }
-function image(path,size="w500") { return path ? (/^https?:\\/\\//i.test(path)?path:TMDB_IMAGE+size+path) : ""; }
+function image(path,size="w500") { return path ? (/^https?:\/\//i.test(path)?path:TMDB_IMAGE+size+path) : ""; }
 function mediaType(item, fallback="movie") { return item?.media_type === "tv" || item?.first_air_date || fallback === "tv" ? "tv" : "movie"; }
 async function tmdb(path, params={}) {
   const url = new URL(JOKFLIX_API + "/api/" + path.replace(/^\/+/, ""));
