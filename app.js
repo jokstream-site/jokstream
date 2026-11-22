@@ -48,10 +48,10 @@ function card(item,type="movie") {
 }
 function fillRow(id,items,type) { const host=$(id);host.replaceChildren();const rows=(items||[]).filter(x=>x.poster_path).slice(0,18);if(!rows.length){host.innerHTML='<p class="muted">No titles available right now.</p>';return;}rows.forEach(x=>host.append(card(x,type))); }
 async function home() {
-  const shelves=[["movie","trendingMovies"],["tv","popularSeries"],["movie","topMovies"],["tv","trendingSeries"]];
-  await Promise.all(shelves.map(async([type,id])=>{
+  const shelves=[["movie","trendingMovies",1],["tv","popularSeries",1],["movie","topMovies",2],["tv","trendingSeries",2]];
+  await Promise.all(shelves.map(async([type,id,page])=>{
     try{
-      const feed=await providerCatalogPage(type,1);
+      const feed=await providerCatalogPage(type,page);
       const entries=(feed.result||[]).slice(0,18);
       const items=await Promise.all(entries.map(entry=>resolveProviderItem(entry,type).catch(()=>null)));
       fillRow(id,items.filter(Boolean),type);
