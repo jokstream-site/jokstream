@@ -102,11 +102,20 @@ function providerFallback(entry,type){
  return {id,title,name:type==="tv"?title:undefined,media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added,overview:"Details are loading from TMDB.",poster_path:null,backdrop_path:null,vote_average:0};
 }
 async function resolveProviderItem(entry,type){
- let id=entry.tmdb_id?String(entry.tmdb_id):"";
- if(!id&&entry.imdb_id){const f=await tmdb("find/"+entry.imdb_id,{external_source:"imdb_id"});id=String(((type==="tv"?f.tv_results:f.movie_results)||[])[0]?.id||"");}
- if(!id)return providerFallback(entry,type);
- const details=await tmdb(type+"/"+id);
- return {...details,id:Number(id),media_type:type,imdb_id:entry.imdb_id||"",vidsrc_quality:entry.quality,vidsrc_added:entry.time_added};
+ const id=entry.imdb_id||entry.tmdb_id;if(!id)return null;
+ let info=null;
+ for(const host of [VIDSRC,"https://vidsrc.ir","https://vidsrc2.ru"]){
+  try{
+   const response=await fetch(host+"/info/"+type+"/"+encodeURIComponent(id)+".json",{headers:{Accept:"application/json"},mode:"cors",credentials:"omit",cache:"no-store",signal:AbortSignal.timeout(10000)});
+   if(response.status===404)return null;if(!response.ok)continue;
+   const data=await response.json();if(data.status_code===404||data.error)return null;info=data;break;
+  }catch(e){continue;}
+ }
+ if(!info)return null;
+ let details={};const tmdbId=info.tmdb_id||entry.tmdb_id;
+ if(tmdbId){try{details=await tmdb(type+"/"+tmdbId);}catch{}}
+ const fallback=providerFallback(entry,type);
+ return {...fallback,...details,id:tmdbId?Number(tmdbId):(info.imdb_id||entry.imdb_id),tmdb_id:tmdbId||"",imdb_id:info.imdb_id||entry.imdb_id||"",title:info.title||details.title||details.name||fallback.title,name:type==="tv"?(info.title||details.name||fallback.title):undefined,poster_path:info.poster||details.poster_path||null,release_date:type==="movie"?(info.year?String(info.year)+"-01-01":details.release_date||""):undefined,first_air_date:type==="tv"?(info.year?String(info.year)+"-01-01":details.first_air_date||""):undefined,vote_average:Number(info.imdb_rating||details.vote_average||0),vidsrc_quality:info.quality||entry.quality||"",vidsrc_added:entry.time_added||"",vidsrc_seasons:Array.isArray(info.seasons)?info.seasons:[],vidsrc_available:true,overview:details.overview||("Available on VidSrc · "+(info.quality||entry.quality||"Quality varies by source")+".")};
 }
 async function loadBrowse(reset=false){
  if(reset){state.browseLoading=false;state.browseRetry=false;$("browseGrid").replaceChildren();state.browsePage=1;state.browseRequest=(state.browseRequest||0)+1;}
