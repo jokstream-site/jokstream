@@ -242,7 +242,7 @@ window.addEventListener("message",event=>{
   if(!payload||payload.type!=="PLAYER_EVENT"||!payload.data)return;
   const data=payload.data,info=data.player_info||{},status=data.player_status||"";
   if(status){$("playerState").textContent=status.toUpperCase();}
-  // Keep VidSrc clickable so its own CAPTCHA and verification remain interactive.
+  if(status==="playing")setPlayerShield(true);
   const progress=Number(data.player_progress),duration=Number(data.player_duration);
   if(Number.isFinite(progress)&&progress>=0&&state.current){const p={time:Math.floor(progress),duration:Number.isFinite(duration)?Math.floor(duration):0,updatedAt:Date.now()};const key=progressKey(state.currentType,state.current.id,info.season||state.currentEpisode?.season,info.episode||state.currentEpisode?.episode);localStorage.setItem(key,JSON.stringify(p));$("playerProgress").textContent="Resume point saved · "+formatTime(progress)+(duration>0?" / "+formatTime(duration):"");}
   if(status==="completed"&&state.currentType==="tv"&&state.currentEpisode)toast("Episode completed. Choose the next episode when you're ready.");
