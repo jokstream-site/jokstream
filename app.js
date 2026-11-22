@@ -83,10 +83,7 @@ function showView(route) {
 }
 function buildGenres(){
   const host=$("genreFilters");host.replaceChildren();
-  const type=state.browseType;const path=type==="tv"?"genre/tv/list":"genre/movie/list";
-  const staticGenres=type==="tv"?[[10759,"Action & Adventure"],[35,"Comedy"],[18,"Drama"],[10765,"Sci-Fi & Fantasy"],[80,"Crime"],[9648,"Mystery"],[10768,"War & Politics"]]:[[28,"Action"],[12,"Adventure"],[16,"Animation"],[35,"Comedy"],[80,"Crime"],[18,"Drama"],[14,"Fantasy"],[27,"Horror"],[878,"Sci-Fi"],[53,"Thriller"]];
-  const all=document.createElement("button");all.className="genre-pill active";all.textContent="All";all.onclick=()=>{state.genre="";host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===all));state.browsePage=1;loadBrowse(true);};host.append(all);
-  staticGenres.forEach(([id,label])=>{const b=document.createElement("button");b.className="genre-pill";b.textContent=label;b.onclick=()=>{state.genre=String(id);host.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));state.browsePage=1;loadBrowse(true);};host.append(b);});
+  const all=document.createElement("button");all.className="genre-pill active";all.textContent="All VidSrc titles";all.disabled=true;host.append(all);
 }
 async function providerCatalogPage(type,page=1){
  const endpoint=type==="tv"?"tvshows":"movies";
@@ -176,7 +173,13 @@ async function showDetails(item,type="movie"){
     const trailer=(d.videos?.results||[]).find(v=>v.site==="YouTube"&&v.type==="Trailer"&&v.key)|| (d.videos?.results||[]).find(v=>v.site==="YouTube"&&v.key);const trailerHost=$("detailsTrailerFrame");trailerHost.replaceChildren();trailerHost.hidden=!trailer;if(trailer){const frame=document.createElement("iframe");frame.src="https://www.youtube-nocookie.com/embed/"+encodeURIComponent(trailer.key)+"?rel=0&modestbranding=1";frame.title=titleOf(d)+" official trailer";frame.allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";frame.allowFullscreen=true;frame.loading="lazy";frame.referrerPolicy="strict-origin-when-cross-origin";trailerHost.append(frame);$("detailsTrailer").hidden=false;$("detailsTrailer").textContent="▶ Play trailer";$("detailsTrailer").onclick=()=>trailerHost.scrollIntoView({behavior:"smooth",block:"center"});}else{$("detailsTrailer").hidden=true;}
     const similar=(d.similar?.results||[]).filter(x=>x.poster_path).slice(0,12);similar.forEach(x=>$("similarRow").append(card(x,state.currentType)));
     if(state.currentType==="tv"){const seasons=(d.seasons||[]).filter(s=>s.season_number>=0);$("seasonsPanel").hidden=false;$("seasonSelect").replaceChildren(...seasons.map(s=>{const o=document.createElement("option");o.value=s.season_number;o.textContent=s.name||"Season "+s.season_number;return o;}));$("seasonSelect").onchange=()=>loadEpisodes(d.id,Number($("seasonSelect").value));const first=seasons.find(s=>s.season_number>0)||seasons[0];if(first){$("seasonSelect").value=first.season_number;loadEpisodes(d.id,first.season_number);}}
-  }catch(e){$("detailsOverview").textContent=e.message;}
+  }catch(e){
+    state.currentDetails=item;$("detailsOverview").textContent=item.overview||"Available on VidSrc.";$("detailsTagline").textContent="";
+    $("detailsCast").textContent="Additional details are not provided by VidSrc.";
+    const facts=[["YEAR",yearOf(item)||"—"],["QUALITY",item.vidsrc_quality||"—"],["SOURCE","VidSrc"]];
+    $("detailsFacts").replaceChildren(...facts.map(([k,v])=>{const f=document.createElement("div");f.className="fact";const a=document.createElement("small");a.textContent=k;const b=document.createElement("b");b.textContent=v;f.append(a,b);return f;}));
+    if(state.currentType==="tv"){const seasons=(item.vidsrc_seasons||[]).filter(x=>Number(x.season)>=0);$("seasonsPanel").hidden=false;$("seasonSelect").replaceChildren(...seasons.map(x=>{const o=document.createElement("option");o.value=x.season;o.textContent="Season "+x.season+" · "+(x.episodes||0)+" episodes";return o;}));$("seasonSelect").onchange=()=>loadEpisodes(item.id,Number($("seasonSelect").value));const first=seasons.find(x=>Number(x.season)>0)||seasons[0];if(first){$("seasonSelect").value=first.season;loadEpisodes(item.id,Number(first.season));}}
+  }
   $("detailsList").textContent=state.myList.some(x=>x.id===item.id&&x.type===state.currentType)?"✓ In My List":"＋ My List";
   $("detailsList").onclick=()=>toggleMyList(item,state.currentType);
   $("detailsPlay").onclick=()=>{if(state.currentType==="tv"){const s=Number($("seasonSelect").value||1);const firstEpisode=Number($("episodeList").querySelector("[data-episode]")?.dataset.episode||1);playVOD(state.currentDetails||item,"tv",s,firstEpisode);}else playVOD(state.currentDetails||item,"movie");};
@@ -184,7 +187,12 @@ async function showDetails(item,type="movie"){
 async function loadEpisodes(id,season){
   $("episodeList").innerHTML='<p class="muted">Loading episodes…</p>';
   try{const d=await tmdb("tv/"+id+"/season/"+season);$("episodeList").replaceChildren();(d.episodes||[]).forEach(ep=>{const b=document.createElement("button");b.className="episode-row";b.dataset.episode=ep.episode_number;const imgEl=document.createElement("img");imgEl.src=image(ep.still_path,"w300");imgEl.alt="";const copy=document.createElement("span");const title=document.createElement("b");title.textContent=ep.episode_number+". "+ep.name;const sub=document.createElement("small");sub.textContent=ep.overview||"Play this episode";copy.append(title,sub);b.append(imgEl,copy);b.onclick=()=>playVOD(state.currentDetails,"tv",season,ep.episode_number);$("episodeList").append(b);});if(!d.episodes?.length)$("episodeList").textContent="No episodes are listed for this season.";
-  }catch(e){$("episodeList").textContent=e.message;}
+  }catch(e){
+    const seasonInfo=(state.current?.vidsrc_seasons||[]).find(x=>Number(x.season)===Number(season));
+    const count=Math.max(0,Number(seasonInfo?.episodes||0));$("episodeList").replaceChildren();
+    for(let n=1;n<=count;n++){const b=document.createElement("button");b.className="episode-row";b.dataset.episode=String(n);const copy=document.createElement("span");const title=document.createElement("b");title.textContent="Episode "+n;const sub=document.createElement("small");sub.textContent="Available episode · "+(seasonInfo?.quality||state.current?.vidsrc_quality||"VidSrc");copy.append(title,sub);b.append(copy);b.onclick=()=>playVOD(state.current,"tv",season,n);$("episodeList").append(b);}
+    if(!count)$("episodeList").textContent="Episode list is unavailable for this season. Use the VidSrc player season picker if available.";
+  }
 }
 function toggleMyList(item,type){
   const key=String(item.id),found=state.myList.findIndex(x=>String(x.id)===key&&x.type===type);
