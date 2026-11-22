@@ -1,4 +1,4 @@
-const CACHE_VERSION = "jokstream-v1";
+const CACHE_VERSION = "jokstream-v2";
 const APP_SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
