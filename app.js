@@ -81,9 +81,32 @@ function showView(route) {
   if(route==="live")loadLive();
   if(route==="mylist")renderMyList();
 }
+const BROWSE_GENRES={
+ movie:[
+  ["", "✨","All"],["28","💥","Action"],["12","🧭","Adventure"],["16","🎨","Animation"],["35","😂","Comedy"],["80","🕵️","Crime"],["18","🎭","Drama"],["14","🪄","Fantasy"],["27","👻","Horror"],["9648","🔎","Mystery"],["10749","💖","Romance"],["878","🚀","Sci-Fi"],["53","😱","Thriller"]
+ ],
+ tv:[
+  ["","✨","All"],["10759","💥","Action & Adventure"],["16","🎨","Animation"],["35","😂","Comedy"],["80","🕵️","Crime"],["18","🎭","Drama"],["10751","👨‍👩‍👧","Family"],["10762","🧸","Kids"],["9648","🔎","Mystery"],["10765","🚀","Sci-Fi & Fantasy"],["10766","💞","Soap"],["10768","⚔️","War & Politics"]
+ ]
+};
 function buildGenres(){
-  const host=$("genreFilters");host.replaceChildren();
-  const all=document.createElement("button");all.className="genre-pill active";all.textContent="All VidSrc titles";all.disabled=true;host.append(all);
+ const host=$("genreFilters");host.replaceChildren();
+ const genres=BROWSE_GENRES[state.browseType]||BROWSE_GENRES.movie;
+ genres.forEach(([id,emoji,label])=>{
+  const button=document.createElement("button");
+  button.type="button";button.className="genre-pill"+(String(state.genre)===id?" active":"");
+  button.textContent=emoji+" "+label;button.setAttribute("aria-pressed",String(String(state.genre)===id));
+  button.addEventListener("click",()=>{
+   if(state.genre===id)return;
+   state.genre=id;state.browsePage=1;buildGenres();loadBrowse(true);
+  });
+  host.append(button);
+ });
+}
+function matchesBrowseGenre(item){
+ if(!state.genre)return true;
+ const ids=Array.isArray(item.genres)?item.genres.map(g=>String(typeof g==="object"?g.id:g)):Array.isArray(item.genre_ids)?item.genre_ids.map(String):[];
+ return ids.includes(String(state.genre));
 }
 async function providerCatalogPage(type,page=1){
  const endpoint=type==="tv"?"tvshows":"movies";
@@ -138,7 +161,7 @@ async function loadBrowse(reset=false){
    const batch=entries.slice(i,i+8);
    const resolved=await Promise.all(batch.map(async entry=>{try{return await Promise.race([resolveProviderItem(entry,type),new Promise((_,reject)=>setTimeout(()=>reject(new Error("VidSrc info timeout")),12000))]);}catch{return null;}}));
    if(request!==state.browseRequest)return;
-   const filtered=resolved.filter(Boolean);
+   const filtered=resolved.filter(item=>item&&matchesBrowseGenre(item));
    filtered.forEach(item=>$("browseGrid").append(card(item,type)));shown+=filtered.length;matched+=filtered.length;
    $("browseCount").textContent="VidSrc catalogue · "+shown+" of "+entries.length+" titles loaded";
   }
