@@ -589,3 +589,48 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
  .genre-filters{margin-right:-13px;padding-right:13px!important;gap:8px!important}
  .genre-pill{min-height:40px!important;padding:9px 14px!important;font-size:11px!important}
 }
+
+/* JOKSTREAM supplied React design integration — visual layer only */
+:root{--purple:#a100ff;--pink:#e000ff;--muted:#aaa0bd}
+body{background:radial-gradient(ellipse at 50% -15%,#281044 0%,#0a0714 40%,#05040b 100%)}
+.topbar{background:linear-gradient(90deg,#090511ee,#0a0615e8);border-bottom:1px solid #38204e}
+.brand-icon{background:linear-gradient(145deg,#d400ff,#6d00e8);box-shadow:0 0 20px #b000ff88;color:#fff}
+.brand-accent{color:#db00ff}
+.global-search{border:1px solid #493064;border-radius:30px;background:#100b20;box-shadow:inset 0 0 15px #1d1030,0 0 12px #5900a533}
+.global-search input{color:#fff}
+.nav-link,.button,.text-link,.genre-pill,.category-pill,.remote-btn,.icon-button,.avatar-button{border-radius:999px;transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease}
+.nav-link{border:1px solid #2d203d;background:#0d0a17}
+.nav-link.active,.nav-link:hover{background:linear-gradient(100deg,#8d00f5,#d000ff);border-color:#d200ff;box-shadow:0 0 18px #bd00ff99}
+.button-primary{border:1px solid #e100ff;background:linear-gradient(100deg,#7900ec,#cf00ff);box-shadow:0 0 18px #b000ff9c,0 0 34px #a100ff44;color:white}
+.button-glass,.text-link{border:1px solid #70408e;background:linear-gradient(145deg,#1b102b,#100a1d);color:#f4d9ff}
+.button:hover,.text-link:hover,.nav-link:hover,.genre-pill:hover,.category-pill:hover,.remote-btn:hover{transform:translateY(-2px);box-shadow:0 0 18px #a100ff77}
+.button:active,.text-link:active,.remote-btn:active{transform:scale(.97)}
+.quick-card{border:1px solid #49265f;background:linear-gradient(145deg,#171027,#0b0814);border-radius:22px;box-shadow:inset 0 0 18px #32144a55,0 8px 24px #05020b88}
+.quick-card:hover{border-color:#bd00ff;box-shadow:0 0 22px #a000ff66,inset 0 0 16px #a000ff22;transform:translateY(-3px)}
+.quick-icon{border-radius:18px;background:linear-gradient(145deg,#3c075b,#170a2b);box-shadow:0 0 18px #a000ff55}
+.genre-pill,.category-pill{border:1px solid #382452;background:linear-gradient(145deg,#171027,#0b0814);color:#e7d9f4;padding:10px 16px}
+.genre-pill.active,.category-pill.active{border-color:#bd00ff;background:linear-gradient(145deg,#3c075b,#170a2b);box-shadow:0 0 16px #a000ff88,inset 0 0 14px #a000ff55}
+.poster-card,.poster-grid .poster-card{border:1px solid #43245d;border-radius:17px;background:#0d0918;padding:6px;overflow:hidden;box-shadow:0 0 12px #7400a522;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.poster-card:hover{transform:translateY(-5px);border-color:#b000ff;box-shadow:0 0 20px #9b00ff66}
+.poster-image{border-radius:12px;aspect-ratio:2/3;object-fit:cover}
+.poster-info{padding:9px 5px 6px}
+.poster-title{font-weight:750}
+.poster-rating{color:#ffc21a}
+.shelf .section-heading h2{font-size:clamp(19px,2vw,25px);font-weight:800}
+.shelf .text-link{padding:10px 18px;border-radius:999px;box-shadow:0 0 12px #a000ff55}
+.hero{border-bottom:1px solid #52206b}
+.hero .button{min-height:48px;padding:12px 23px;font-size:14px;font-weight:800}
+.hero-index{color:#e6d5f2}
+.select-control,.channel-search{border:1px solid #493064;border-radius:16px;background:#100b20;color:#f7efff}
+.details-panel{border:1px solid #77449a;border-radius:24px;background:linear-gradient(135deg,#171026,#090611);box-shadow:0 0 35px #9b00ff55}
+.modal-close{border-radius:50%;background:#160d23;border:1px solid #56346e}
+.remote-panel{border:1px solid #4d2868;border-radius:20px;background:linear-gradient(135deg,#171026,#090611)}
+.remote-btn{border:1px solid #603080;background:linear-gradient(145deg,#251139,#10091c);color:#ead5ff;min-height:42px;box-shadow:inset 0 0 12px #a000ff18}
+.remote-btn.remote-main,.remote-btn:focus-visible{background:linear-gradient(100deg,#7900ec,#cf00ff);box-shadow:0 0 16px #a100ff88}
+.channel-row{border:1px solid #39224c;border-radius:15px;background:linear-gradient(145deg,#171027,#0b0814)}
+.channel-row:hover,.channel-row.active{border-color:#b000ff;box-shadow:0 0 16px #a000ff55}
+.live-stage-card,.channel-browser{border:1px solid #49265f;border-radius:22px;background:linear-gradient(145deg,#171027,#0b0814)}
+.mobile-nav{background:#090512f5;border-top:1px solid #552078;box-shadow:0 -5px 25px #8900d833}
+.mobile-nav button.active{color:#e4a0ff;filter:drop-shadow(0 0 7px #c000ff)}
+:focus-visible{outline:2px solid #e000ff!important;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
