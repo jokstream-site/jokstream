@@ -209,20 +209,21 @@ async function loadBrowse(reset=false){
   const d=await providerCatalogPage(type,page);if(request!==state.browseRequest)return;
   const entries=d.result||[];if(!entries.length){$("browseCount").textContent="No titles found in this catalogue page.";$("browseGrid").innerHTML='<div class="empty-state">No titles are available on this page.</div>';return;}
   $("browseCount").textContent="VidSrc catalogue · "+entries.length+" titles in this page · Loading details progressively…";
-  let shown=0,matched=0;
+  let matchedItems=[];
   for(let i=0;i<entries.length;i+=8){
    const batch=entries.slice(i,i+8);
    const resolved=await Promise.all(batch.map(async entry=>{try{return await Promise.race([resolveProviderItem(entry,type),new Promise((_,reject)=>setTimeout(()=>reject(new Error("VidSrc info timeout")),12000))]);}catch{return null;}}));
    if(request!==state.browseRequest)return;
-   const filtered=resolved.filter(item=>item&&item.vidsrc_available&&matchesBrowseGenre(item));
-   filtered.sort((a,b)=>{
-    if(state.browseSort==="vote_average.desc")return Number(b.vote_average||0)-Number(a.vote_average||0);
-    if(state.browseSort==="primary_release_date.desc")return String(type==="tv"?b.first_air_date||"":b.release_date||"").localeCompare(String(type==="tv"?a.first_air_date||"":a.release_date||""));
-    return String(b.vidsrc_added||"").localeCompare(String(a.vidsrc_added||""));
-   });
-   filtered.forEach(item=>$("browseGrid").append(card(item,type)));shown+=filtered.length;matched+=filtered.length;
-   $("browseCount").textContent="VidSrc catalogue · "+shown+" of "+entries.length+" titles loaded";
+   matchedItems.push(...resolved.filter(item=>item&&item.vidsrc_available&&matchesBrowseGenre(item)));
+   $("browseCount").textContent="VidSrc catalogue · Checking "+Math.min(i+8,entries.length)+" of "+entries.length+" titles…";
   }
+  matchedItems.sort((a,b)=>{
+   if(state.browseSort==="vote_average.desc")return Number(b.vote_average||0)-Number(a.vote_average||0);
+   if(state.browseSort==="primary_release_date.desc")return String(type==="tv"?b.first_air_date||"":b.release_date||"").localeCompare(String(type==="tv"?a.first_air_date||"":a.release_date||""));
+   return String(b.vidsrc_added||"").localeCompare(String(a.vidsrc_added||""));
+  });
+  const matched=matchedItems.length;
+  matchedItems.forEach(item=>$("browseGrid").append(card(item,type)));
   $("browseCount").textContent="Verified VidSrc titles · Page "+page+" of "+Number(d.pages||1).toLocaleString()+" · "+matched+" titles loaded · "+(state.browseSort==="vote_average.desc"?"sorted by rating":state.browseSort==="primary_release_date.desc"?"sorted by release date":"sorted by recently added");
   $("loadMoreTitles").hidden=!d.pages||page>=d.pages;$("loadMoreTitles").textContent=page>=Number(d.pages||page)?"Catalogue complete":"Scroll to load the next 50";
   if(!matched)$("browseGrid").innerHTML='<div class="empty-state">No playable titles were verified on this VidSrc page. Try the next page.</div>';
