@@ -11,7 +11,7 @@
   <title>JOKSTREAM — Live TV, Movies & Series</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=20261122-button-icons2">
+  <link rel="stylesheet" href="./style.css?v=20261123-react-design1">
 </head>
 <body>
   <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
@@ -65,7 +65,7 @@
 
     <section id="browseView" class="view page-view">
       <div class="page-heading"><div><span class="eyebrow" id="browseEyebrow">EXPLORE THE LIBRARY</span><h1 id="browseTitle">Movies</h1><p id="browseDescription">Find something worth watching.</p></div>
-        <select id="sortSelect" class="select-control" aria-label="Sort titles"><option value="popularity.desc">Most popular</option><option value="primary_release_date.desc">Newest first</option><option value="vote_average.desc">Top rated</option></select>
+        <select id="sortSelect" class="select-control" aria-label="Sort titles"><option value="primary_release_date.desc">🆕 Newest releases</option><option value="vote_average.desc">⭐ Top rated</option><option value="added.desc">✨ Recently added</option></select>
       </div>
       <div class="filter-bar"><div id="genreFilters" class="genre-filters"></div><span id="browseCount" class="muted"></span></div>
       <div id="browseGrid" class="poster-grid"></div>
@@ -143,6 +143,6 @@
   <nav class="mobile-nav" aria-label="Mobile navigation"><button data-route="home" class="active"><span aria-hidden="true">⌂</span>Home</button><button data-route="live"><span aria-hidden="true">◉</span>Live</button><button data-route="movies"><span aria-hidden="true">▱</span>Movies</button><button data-route="series"><span aria-hidden="true">▤</span>Series</button><button data-route="mylist"><span aria-hidden="true">♧</span>My List</button></nav>
 
   <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
-  <script src="./app.js?v=20261122-vidsrc-strict-verify1"></script>
+  <script src="./app.js?v=20261123-react-design1"></script>
 </body>
 </html>
