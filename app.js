@@ -6,7 +6,7 @@ const VIDSRC_HOSTS = ["https://vidsrc.sh"];
 const VIDSRC = VIDSRC_HOSTS[0];
 const $ = (id) => document.getElementById(id);
 const state = {
-  route: "home", browseType: "movie", browsePage: 1, browseSort: "popularity.desc",
+  route: "home", browseType: "movie", browsePage: 1, browseSort: "primary_release_date.desc",
   genre: "", current: null, currentType: "movie", currentEpisode: null, currentDetails: null,
   liveChannels: [], liveRendered: 0, liveCategories: [], liveCategory: "", liveSearch: "", liveEngine: null,
   subtitleContext: null, selectedSubtitle: null, progress: {}, myList: readStore("jokstream_mylist", []),
@@ -48,27 +48,38 @@ function card(item,type="movie") {
 }
 function fillRow(id,items,type) { const host=$(id);host.replaceChildren();const rows=(items||[]).filter(x=>x.poster_path).slice(0,18);if(!rows.length){host.innerHTML='<p class="muted">No titles available right now.</p>';return;}rows.forEach(x=>host.append(card(x,type))); }
 async function home() {
-  const shelves=[["movie","trendingMovies",1],["tv","popularSeries",1],["movie","topMovies",2],["tv","trendingSeries",2]];
-  await Promise.all(shelves.map(async([type,id,page])=>{
-    try{
-      const feed=await providerCatalogPage(type,page);
-      const entries=(feed.result||[]).slice(0,18);
-      const items=await Promise.all(entries.map(entry=>resolveProviderItem(entry,type).catch(()=>null)));
-      fillRow(id,items.filter(Boolean),type);
-    }catch(e){$(id).innerHTML='<p class="muted">VidSrc catalogue is temporarily unavailable.</p>';console.warn("VidSrc home shelf",type,e);}
-  }));
-  try{
-    const feed=await providerCatalogPage("movie",1);
-    const hero=await resolveProviderItem((feed.result||[])[0],"movie");
-    if(hero){
-      $("heroBackdrop").style.backgroundImage=hero.poster_path?"linear-gradient(90deg,#080b12e8,#080b1270),url('"+image(hero.poster_path)+"')":"";
-      $("heroTitle").textContent=titleOf(hero);
-      $("heroOverview").textContent="Available on VidSrc · "+(hero.vidsrc_quality||"Quality varies by source")+".";
-      $("heroMeta").replaceChildren();
-      [yearOf(hero),hero.vidsrc_quality||""].filter(Boolean).forEach(v=>{const span=document.createElement("span");span.textContent=v;$("heroMeta").append(span);});
-      $("heroPlay").onclick=()=>showDetails(hero,"movie");$("heroInfo").onclick=()=>showDetails(hero,"movie");
-    }
-  }catch(e){console.warn("VidSrc hero unavailable",e);}
+ const loadVerified=async type=>{
+  const feed=await providerCatalogPage(type,1);
+  const entries=(feed.result||[]).slice(0,32);
+  const resolved=[];
+  for(let i=0;i<entries.length;i+=8){
+   const batch=await Promise.all(entries.slice(i,i+8).map(entry=>resolveProviderItem(entry,type).catch(()=>null)));
+   resolved.push(...batch.filter(item=>item&&item.vidsrc_available));
+  }
+  const byDate=[...resolved].sort((a,b)=>String(type==="tv"?b.first_air_date||"":b.release_date||"").localeCompare(String(type==="tv"?a.first_air_date||"":a.release_date||"")));
+  const byRating=[...resolved].filter(x=>Number(x.vote_average)>0).sort((a,b)=>Number(b.vote_average)-Number(a.vote_average));
+  return {latest:byDate,top:byRating};
+ };
+ const [movies,series]=await Promise.all([
+  loadVerified("movie").catch(e=>{console.warn("VidSrc movie catalogue",e);return null;}),
+  loadVerified("tv").catch(e=>{console.warn("VidSrc series catalogue",e);return null;})
+ ]);
+ if(movies){fillRow("trendingMovies",movies.latest,"movie");fillRow("topMovies",movies.top,"movie");}
+ else {["trendingMovies","topMovies"].forEach(id=>$(id).innerHTML='<p class="muted">VidSrc catalogue is temporarily unavailable.</p>');}
+ if(series){fillRow("popularSeries",series.latest,"tv");fillRow("trendingSeries",series.top,"tv");}
+ else {["popularSeries","trendingSeries"].forEach(id=>$(id).innerHTML='<p class="muted">VidSrc catalogue is temporarily unavailable.</p>');}
+ const hero=movies?.latest?.[0];
+ if(hero){
+  $("heroBackdrop").style.backgroundImage=hero.backdrop_path
+   ?"linear-gradient(90deg,#080510f2 0%,#080510a8 46%,#08051022 100%),url('"+image(hero.backdrop_path,"w1280")+"')"
+   :hero.poster_path?"linear-gradient(90deg,#080510f2 0%,#080510a8 46%,#08051022 100%),url('"+image(hero.poster_path)+"')":"";
+  $("heroTitle").textContent=titleOf(hero);
+  $("heroOverview").textContent=hero.overview||"Available on VidSrc.";
+  $("heroMeta").replaceChildren();
+  [yearOf(hero),hero.vote_average?"★ "+Number(hero.vote_average).toFixed(1):"",hero.vidsrc_quality||""].filter(Boolean).forEach(v=>{const span=document.createElement("span");span.textContent=v;$("heroMeta").append(span);});
+  $("heroPlay").onclick=()=>playVOD(hero,"movie");
+  $("heroInfo").onclick=()=>showDetails(hero,"movie");
+ }
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function showView(route) {
@@ -193,7 +204,7 @@ async function loadBrowse(reset=false){
  if(reset){state.browseLoading=false;state.browseRetry=false;$("browseGrid").replaceChildren();state.browsePage=1;state.browseRequest=(state.browseRequest||0)+1;}
  if(state.browseLoading)return;
  const request=state.browseRequest||0,type=state.browseType,page=state.browsePage;
- state.browseLoading=true;state.browseRetry=false;$("sortSelect").disabled=true;$("sortSelect").innerHTML='<option>Recently added · VidSrc catalogue</option>';$("browseCount").textContent="Loading page "+page+" · up to 50 titles…";$("loadMoreTitles").hidden=true;$("loadMoreTitles").textContent="Loading next 50 titles…";
+ state.browseLoading=true;state.browseRetry=false;$("sortSelect").disabled=false;$("sortSelect").value=state.browseSort;$("browseCount").textContent="Loading page "+page+" · up to 50 titles…";$("loadMoreTitles").hidden=true;$("loadMoreTitles").textContent="Loading next 50 titles…";
  try{
   const d=await providerCatalogPage(type,page);if(request!==state.browseRequest)return;
   const entries=d.result||[];if(!entries.length){$("browseCount").textContent="No titles found in this catalogue page.";$("browseGrid").innerHTML='<div class="empty-state">No titles are available on this page.</div>';return;}
@@ -203,11 +214,16 @@ async function loadBrowse(reset=false){
    const batch=entries.slice(i,i+8);
    const resolved=await Promise.all(batch.map(async entry=>{try{return await Promise.race([resolveProviderItem(entry,type),new Promise((_,reject)=>setTimeout(()=>reject(new Error("VidSrc info timeout")),12000))]);}catch{return null;}}));
    if(request!==state.browseRequest)return;
-   const filtered=resolved.filter(item=>item&&matchesBrowseGenre(item));
+   const filtered=resolved.filter(item=>item&&item.vidsrc_available&&matchesBrowseGenre(item));
+   filtered.sort((a,b)=>{
+    if(state.browseSort==="vote_average.desc")return Number(b.vote_average||0)-Number(a.vote_average||0);
+    if(state.browseSort==="primary_release_date.desc")return String(type==="tv"?b.first_air_date||"":b.release_date||"").localeCompare(String(type==="tv"?a.first_air_date||"":a.release_date||""));
+    return String(b.vidsrc_added||"").localeCompare(String(a.vidsrc_added||""));
+   });
    filtered.forEach(item=>$("browseGrid").append(card(item,type)));shown+=filtered.length;matched+=filtered.length;
    $("browseCount").textContent="VidSrc catalogue · "+shown+" of "+entries.length+" titles loaded";
   }
-  $("browseCount").textContent="VidSrc catalogue · Page "+page+" of "+Number(d.pages||1).toLocaleString()+" · "+matched+" titles loaded · 50 per page";
+  $("browseCount").textContent="Verified VidSrc titles · Page "+page+" of "+Number(d.pages||1).toLocaleString()+" · "+matched+" titles loaded · "+(state.browseSort==="vote_average.desc"?"sorted by rating":state.browseSort==="primary_release_date.desc"?"sorted by release date":"sorted by recently added");
   $("loadMoreTitles").hidden=!d.pages||page>=d.pages;$("loadMoreTitles").textContent=page>=Number(d.pages||page)?"Catalogue complete":"Scroll to load the next 50";
   if(!matched)$("browseGrid").innerHTML='<div class="empty-state">No playable titles were verified on this VidSrc page. Try the next page.</div>';
  }catch(e){
@@ -448,7 +464,7 @@ function setupEvents(){
     const close=event.target.closest("[data-close]")?.dataset.close;if(close){closeModal(close==="details"?"detailsModal":close==="player"?"playerModal":"subtitleModal");if(close==="player"){$("embedStage").querySelectorAll("iframe,.player-shield").forEach(x=>x.remove());}}
   });
   $("loadMoreTitles").onclick=()=>{if(state.browseLoading)return;if(!state.browseRetry)state.browsePage++;loadBrowse(false);};
-  $("sortSelect").onchange=()=>{state.browsePage=1;loadBrowse(true);};
+  $("sortSelect").onchange=()=>{state.browseSort=$("sortSelect").value;state.browsePage=1;loadBrowse(true);};
   $("globalSearch").addEventListener("keydown",e=>{if(e.key==="Enter")runSearch(e.target.value);});
   $("searchButton").onclick=()=>runSearch($("globalSearch").value);
   $("myListButton").onclick=()=>showView("mylist");
