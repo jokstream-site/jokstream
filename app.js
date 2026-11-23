@@ -6,7 +6,7 @@ const VIDSRC_HOSTS = ["https://vidsrc.sh"];
 const VIDSRC = VIDSRC_HOSTS[0];
 const $ = (id) => document.getElementById(id);
 const state = {
-  route: "home", browseType: "movie", browsePage: 1, browseSort: "primary_release_date.desc",
+  route: "live", browseType: "movie", browsePage: 1, browseSort: "primary_release_date.desc",
   genre: "", current: null, currentType: "movie", currentEpisode: null, currentDetails: null,
   liveChannels: [], liveRendered: 0, liveCategories: [], liveCategory: "", liveSearch: "", liveEngine: null,
   subtitleContext: null, selectedSubtitle: null, progress: {}, myList: readStore("jokstream_mylist", []),
@@ -98,6 +98,7 @@ async function home() {
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function showView(route) {
+  route="live";
   state.route=route;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   const target=route==="live"?"liveView":route==="movies"||route==="series"?"browseView":route==="mylist"?"mylistView":route==="search"?"searchView":"homeView";
@@ -451,15 +452,12 @@ function renderSearchResults(items){
   if(!items?.length){host.innerHTML='<div class="empty-state">No matching movies or series were found.</div>';return;}
   items.filter(x=>["movie","tv"].includes(x.media_type)||x.title||x.name).forEach(x=>host.append(card(x,mediaType(x))));
 }
-async function runSearch(query){
-  const q=query.trim();if(q.length<2)return;state.searchQuery=q;showView("search");$("searchHeading").textContent="VidSrc available results for “"+q+"”";
-  try{
-    const d=await tmdb("search/multi",{query:q,page:1});
-    const candidates=(d.results||[]).filter(x=>["movie","tv"].includes(x.media_type)).slice(0,24);
-    const verified=await Promise.all(candidates.map(async item=>{try{return await resolveProviderItem({tmdb_id:String(item.id),title:titleOf(item)},item.media_type==="tv"?"tv":"movie");}catch{return null;}}));
-    renderSearchResults(verified.filter(Boolean));
-    if(!verified.some(Boolean))$("searchGrid").innerHTML='<div class="empty-state">No matching title is currently listed as available on VidSrc.</div>';
-  }catch(e){$("searchGrid").innerHTML='<div class="empty-state">Search unavailable: '+escapeHtml(e.message)+'</div>';}
+function runSearch(query){
+  const q=String(query||"").trim();
+  $("channelSearch").value=q;
+  state.liveSearch=q;
+  showView("live");
+  if(state.liveChannels.length)renderChannels();
 }
 function setupPopupProtection(){
   const original=window.open;
@@ -505,6 +503,6 @@ document.addEventListener("DOMContentLoaded",()=>{
     const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(entry.isIntersecting&&!more.hidden&&!state.browseLoading&&!state.browseRetry){state.browsePage++;loadBrowse(false);}}},{root:null,rootMargin:"700px 0px",threshold:0});
     observer.observe(more);
   }
-  $("year").textContent=new Date().getFullYear();setupPopupProtection();setupEvents();home();
+  $("year").textContent=new Date().getFullYear();setupPopupProtection();setupEvents();showView("live");
   $("liveVideo").addEventListener("playing",()=>$("liveStatus").textContent="Playing live");$("liveVideo").addEventListener("waiting",()=>$("liveStatus").textContent="Buffering live stream…");$("liveVideo").addEventListener("error",()=>$("liveStatus").textContent="Stream could not be played. Try another channel.");
 });
