@@ -421,13 +421,9 @@ async function loadLive(){
  if(state.liveChannels.length){renderChannels();return;}
  $("liveStatus").textContent="Loading full channel catalogue…";
  try{
-  const first=await fetchLiveCatalogPage(1);
+  const first=await apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page:1,limit:100});if(!first.ok)throw new Error(first.error||"Channel catalogue unavailable");
   const all=[...(first.items||[])],pages=Math.ceil(Number(first.total||all.length)/100);
-  for(let start=2;start<=pages;start+=3){
-   const nums=Array.from({length:Math.min(3,pages-start+1)},(_,i)=>start+i);
-   const batch=await Promise.all(nums.map(fetchLiveCatalogPage));
-   batch.forEach(x=>all.push(...(x.items||[])));
-  }
+  for(let start=2;start<=pages;start+=8){const nums=Array.from({length:Math.min(8,pages-start+1)},(_,i)=>start+i);const batch=await Promise.all(nums.map(page=>apiJson(JOKSTREAM_API+"/api/catalog",{kind:"live",page,limit:100})));batch.forEach(x=>all.push(...(x.items||[])));}
   state.liveChannels=all.map(normalizeChannel).filter(x=>x.id);state.liveCategories=first.categories||[];state.liveRendered=0;
   $("liveCount").textContent=state.liveChannels.length.toLocaleString();$("liveStatus").textContent=state.liveChannels.length?"Full channel catalogue ready":"No channels published by provider.";renderCategories();renderChannels();
  }catch(e){$("liveStatus").textContent="Channel service unavailable";$("channelList").innerHTML='<div class="empty-state">Could not load channels. '+escapeHtml(e.message)+'</div>';toast("Live TV connection failed.",true);}
