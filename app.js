@@ -35,15 +35,16 @@ async function apiJson(url, params={}) {
   return response.json();
 }
 function card(item,type="movie") {
-  const el=document.createElement("article");el.className="poster-card";el.tabIndex=0;
-  const poster=document.createElement("img");poster.className="poster-image";poster.loading="lazy";poster.alt=titleOf(item);poster.src=image(item.poster_path,"w342");poster.onerror=()=>{poster.style.opacity=".15";};
-  const info=document.createElement("div");info.className="poster-info";
-  const name=document.createElement("div");name.className="poster-title";name.textContent=titleOf(item);
-  const sub=document.createElement("div");sub.className="poster-sub";
-  const year=document.createElement("span");year.textContent=yearOf(item)||"Explore";
-  const rating=document.createElement("span");rating.className="poster-rating";rating.textContent="★ "+Number(item.vote_average||0).toFixed(1);
-  sub.append(year,rating);info.append(name,sub);el.append(poster,info);
-  const open=()=>showDetails(item,type);el.addEventListener("click",open);el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}});
+  const el=document.createElement("button");el.type="button";el.className="movie-card";
+  const art=document.createElement("span");art.className="poster-art";
+  const poster=document.createElement("img");poster.className="poster-image";poster.loading="lazy";poster.alt=titleOf(item);poster.src=image(item.poster_path,"w342");poster.onerror=()=>{poster.style.opacity=".12";};
+  const hd=document.createElement("span");hd.className="hd-tag";hd.textContent="HD";
+  const play=document.createElement("span");play.className="poster-play";play.textContent="▶";
+  art.append(poster,hd,play);
+  const name=document.createElement("strong");name.textContent=titleOf(item);
+  const sub=document.createElement("span");sub.className="rating";sub.textContent="⭐ "+Number(item.vote_average||0).toFixed(1);
+  el.append(art,name,sub);
+  const open=()=>showDetails(item,type);el.addEventListener("click",open);
   return el;
 }
 function fillRow(id,items,type) { const host=$(id);host.replaceChildren();const rows=(items||[]).filter(x=>x.poster_path).slice(0,18);if(!rows.length){host.innerHTML='<p class="muted">No titles available right now.</p>';return;}rows.forEach(x=>host.append(card(x,type))); }
@@ -79,6 +80,20 @@ async function home() {
   [yearOf(hero),hero.vote_average?"★ "+Number(hero.vote_average).toFixed(1):"",hero.vidsrc_quality||""].filter(Boolean).forEach(v=>{const span=document.createElement("span");span.textContent=v;$("heroMeta").append(span);});
   $("heroPlay").onclick=()=>playVOD(hero,"movie");
   $("heroInfo").onclick=()=>showDetails(hero,"movie");
+  const feature=$("homeFeatured");
+  if(feature){
+   feature.hidden=false;
+   $("homeFeaturedTitle").textContent=titleOf(hero);
+   $("homeFeaturedOverview").textContent=hero.overview||"Available on VidSrc.";
+   $("homeFeaturedImage").style.backgroundImage="linear-gradient(0deg,#08051055,#08051011),url('"+image(hero.backdrop_path||hero.poster_path,"w780")+"')";
+   $("homeFeaturedMeta").replaceChildren();
+   [[ "⭐ "+Number(hero.vote_average||0).toFixed(1)+"/10"],[yearOf(hero)]].flat().filter(Boolean).forEach(v=>{const s=document.createElement("span");s.textContent=v;$("homeFeaturedMeta").append(s);});
+   $("homeFeaturedGenres").replaceChildren();
+   (hero.genres||[]).slice(0,4).forEach(g=>{const s=document.createElement("span");s.textContent=g.name;$("homeFeaturedGenres").append(s);});
+   $("homeFeaturedImage").onclick=()=>showDetails(hero,"movie");
+   $("homeFeaturedPlay").onclick=()=>playVOD(hero,"movie");
+   $("homeFeaturedSave").onclick=()=>toggleMyList(hero,"movie");
+  }
  }
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
@@ -88,7 +103,7 @@ function showView(route) {
   const target=route==="live"?"liveView":route==="movies"||route==="series"?"browseView":route==="mylist"?"mylistView":route==="search"?"searchView":"homeView";
   $(target).classList.add("active");
   document.querySelectorAll("[data-route]").forEach(b=>b.classList.toggle("active",b.dataset.route===route));
-  if(route==="movies"||route==="series"){state.browseType=route==="series"?"tv":"movie";state.browsePage=1;state.genre="";$("browseTitle").textContent=route==="series"?"Series":"Movies";$("browseEyebrow").textContent=route==="series"?"SERIES COLLECTION":"EXPLORE THE LIBRARY";$("browseDescription").textContent=route==="series"?"Discover acclaimed shows and new seasons.":"Explore films from every genre and era.";buildGenres();loadBrowse(true);}
+  if(route==="movies"||route==="series"){state.browseType=route==="series"?"tv":"movie";state.browsePage=1;state.genre=state.pendingGenre||"";state.pendingGenre="";$("browseTitle").textContent=route==="series"?"Series":"Movies";$("browseEyebrow").textContent=route==="series"?"SERIES COLLECTION":"EXPLORE THE LIBRARY";$("browseDescription").textContent=route==="series"?"Discover acclaimed shows and new seasons.":"Explore films from every genre and era.";buildGenres();loadBrowse(true);}
   if(route==="live")loadLive();
   if(route==="mylist")renderMyList();
 }
@@ -469,6 +484,11 @@ function setupEvents(){
   $("globalSearch").addEventListener("keydown",e=>{if(e.key==="Enter")runSearch(e.target.value);});
   $("searchButton").onclick=()=>runSearch($("globalSearch").value);
   $("myListButton").onclick=()=>showView("mylist");
+  document.querySelectorAll("[data-home-genre]").forEach(b=>b.onclick=()=>{
+    state.pendingGenre=b.dataset.homeGenre||"";
+    showView("movies");
+    document.querySelectorAll("[data-home-genre]").forEach(x=>x.classList.toggle("chosen",x===b));
+  });
   $("channelSearch").oninput=e=>{state.liveSearch=e.target.value;renderChannels();};
   $("liveFullscreen").onclick=()=>{const v=$("liveVideo");if(v.requestFullscreen)v.requestFullscreen();};
   $("playerClickToggle").onclick=()=>setPlayerShield(!$("embedStage").querySelector(".player-shield"));
